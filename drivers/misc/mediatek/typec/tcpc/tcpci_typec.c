@@ -1,16 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2016 MediaTek Inc.
- *
- * TCPC Type-C Driver for Richtek
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
 
 #include <linux/delay.h>
@@ -405,8 +395,7 @@ static inline int typec_norp_src_attached_entry(struct tcpc_device *tcpc)
 #ifdef CONFIG_WATER_DETECTION
 #ifdef CONFIG_WD_POLLING_ONLY
 	if (!tcpc->typec_power_ctrl) {
-		if (get_boot_mode() == KERNEL_POWER_OFF_CHARGING_BOOT ||
-		    get_boot_mode() == LOW_POWER_OFF_CHARGING_BOOT)
+		if (tcpc->bootmode == 8 || tcpc->bootmode == 9)
 			typec_check_water_status(tcpc);
 
 		tcpci_set_usbid_polling(tcpc, false);
@@ -564,9 +553,7 @@ static inline void typec_unattached_cc_entry(struct tcpc_device *tcpc)
 	}
 #endif	/* CONFIG_TYPEC_CAP_ROLE_SWAP */
 #ifdef CONFIG_CABLE_TYPE_DETECTION
-	if (tcpc->typec_state == typec_attached_snk ||
-	    tcpc->typec_state == typec_unattachwait_pe)
-		tcpc_typec_handle_ctd(tcpc, TCPC_CABLE_TYPE_NONE);
+	tcpc_typec_handle_ctd(tcpc, TCPC_CABLE_TYPE_NONE);
 #endif /* CONFIG_CABLE_TYPE_DETECTION */
 
 	tcpc->typec_role = tcpc->typec_role_new;
@@ -2076,8 +2063,7 @@ int tcpc_typec_handle_cc_change(struct tcpc_device *tcpc)
 		if (typec_state_old == typec_unattached_snk ||
 		    typec_state_old == typec_unattached_src) {
 #ifdef CONFIG_WD_POLLING_ONLY
-			if (get_boot_mode() == KERNEL_POWER_OFF_CHARGING_BOOT
-			    || get_boot_mode() == LOW_POWER_OFF_CHARGING_BOOT)
+			if (tcpc->bootmode == 8 || tcpc->bootmode == 9)
 				typec_check_water_status(tcpc);
 #else
 			typec_check_water_status(tcpc);
@@ -2199,20 +2185,22 @@ static inline int typec_handle_pe_idle(struct tcpc_device *tcpc)
 #ifdef CONFIG_USB_PD_WAIT_BC12
 static inline void typec_handle_pd_wait_bc12(struct tcpc_device *tcpc)
 {
+	int ret = 0;
 	uint8_t type = TYPEC_UNATTACHED;
-	enum charger_type chg_type = CHARGER_UNKNOWN;
+	union power_supply_propval val = {.intval = 0};
 
 	mutex_lock(&tcpc->access_lock);
 
 	type = tcpc->typec_attach_new;
-	chg_type = mt_get_charger_type();
-	TYPEC_INFO("type=%d, chg_type=%d, count=%d\n", type, chg_type,
-		tcpc->pd_wait_bc12_count);
+	ret = power_supply_get_property(tcpc->chg_psy,
+		POWER_SUPPLY_PROP_USB_TYPE, &val);
+	TYPEC_INFO("type=%d, ret,chg_type=%d,%d, count=%d\n", type,
+		ret, val.intval, tcpc->pd_wait_bc12_count);
 
 	if (type != TYPEC_ATTACHED_SNK && type != TYPEC_ATTACHED_DBGACC_SNK)
 		goto out;
 
-	if (chg_type != CHARGER_UNKNOWN ||
+	if ((ret >= 0 && val.intval != POWER_SUPPLY_USB_TYPE_UNKNOWN) ||
 		tcpc->pd_wait_bc12_count >= 20) {
 		__pd_put_cc_attached_event(tcpc, type);
 	} else {
@@ -2832,7 +2820,6 @@ int tcpc_typec_handle_wd(struct tcpc_device *tcpc, bool wd)
 {
 	int ret = 0;
 
-	pr_info("%s: wd = %d\n", __func__, wd);
 	if (!(tcpc->tcpc_flags & TCPC_FLAGS_WATER_DETECTION))
 		return 0;
 
@@ -2844,9 +2831,7 @@ int tcpc_typec_handle_wd(struct tcpc_device *tcpc, bool wd)
 	}
 
 #ifdef CONFIG_MTK_KERNEL_POWER_OFF_CHARGING
-	ret = get_boot_mode();
-	if (ret == KERNEL_POWER_OFF_CHARGING_BOOT ||
-	    ret == LOW_POWER_OFF_CHARGING_BOOT) {
+	if (tcpc->bootmode == 8 || tcpc->bootmode == 9) {
 		TYPEC_INFO("KPOC does not enter water protection\n");
 		goto out;
 	}
@@ -2884,9 +2869,9 @@ int tcpc_typec_handle_ctd(struct tcpc_device *tcpc,
 {
 	int ret;
 
-	TCPC_INFO("%s: cable_type = %d\n", __func__, cable_type);
 	if (!(tcpc->tcpc_flags & TCPC_FLAGS_CABLE_TYPE_DETECTION))
 		return 0;
+
 
 	/* Filter out initial no cable */
 	if (cable_type == TCPC_CABLE_TYPE_C2C) {
@@ -2901,24 +2886,6 @@ int tcpc_typec_handle_ctd(struct tcpc_device *tcpc,
 		}
 	}
 
-	TCPC_INFO("%s: typec_state=%s, pre_ct=%d, ct=%d, typec_ct=%d\n",
-		  __func__, typec_state_name[tcpc->typec_state],
-		  tcpc->pre_typec_cable_type,
-		  cable_type,  tcpc->typec_cable_type);
-
-	if (tcpc->typec_state == typec_attachwait_snk) {
-		TCPC_INFO("%s during attachwait_snk\n", __func__);
-		tcpc->pre_typec_cable_type = cable_type;
-	} else if (tcpc->typec_state == typec_try_snk ||
-		   (tcpc->typec_state == typec_attached_snk &&
-			cable_type != TCPC_CABLE_TYPE_NONE)) {
-		if (tcpc->pre_typec_cable_type != TCPC_CABLE_TYPE_NONE) {
-			TCPC_INFO("%s try_snk cable(%d, %d)\n", __func__,
-				  tcpc->pre_typec_cable_type, cable_type);
-			cable_type = tcpc->pre_typec_cable_type;
-			tcpc->pre_typec_cable_type = TCPC_CABLE_TYPE_NONE;
-		}
-	}
 	TCPC_INFO("%s cable (%d, %d)\n", __func__, tcpc->typec_cable_type,
 		  cable_type);
 

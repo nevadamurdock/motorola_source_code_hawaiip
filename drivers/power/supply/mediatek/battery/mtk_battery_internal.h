@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- */
+ * Copyright (c) 2021 MediaTek Inc.
+*/
 
 #ifndef __MTK_BATTERY_INTF_H__
 #define __MTK_BATTERY_INTF_H__
@@ -789,6 +781,9 @@ struct mtk_battery {
 
 	struct zcv_filter zcvf;
 
+/*boot mode*/
+	int boot_mode;
+
 /*simulator log*/
 	struct simulator_log log;
 
@@ -926,7 +921,7 @@ struct mtk_battery {
 	int sw_iavg_gap;
 
 	/*sw low battery interrupt*/
-	struct lbat_user lowbat_service;
+	struct lbat_user *lowbat_service;
 	int sw_low_battery_ht_en;
 	int sw_low_battery_ht_threshold;
 	int sw_low_battery_lt_en;
@@ -1072,6 +1067,9 @@ extern int gauge_enable_interrupt(int intr_number, int en);
 /* GM25 Plug out API */
 int en_intr_VBATON_UNDET(int en);
 int reg_VBATON_UNDET(void (*callback)(void));
+
+/* boot mode */
+int battery_get_boot_mode(void);
 
 /* zcvf */
 int zcv_filter_add(struct zcv_filter *zf);

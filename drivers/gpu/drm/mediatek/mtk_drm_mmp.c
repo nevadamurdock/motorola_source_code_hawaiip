@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #include <drm/drm_crtc.h>
 #include "mtk_drm_mmp.h"
@@ -246,6 +238,12 @@ void init_crtc_mmp_event(void)
 					mmprofile_register_event(
 					g_CRTC_MMP_Events[i].cwbBmpDump,
 					"cwb_dump");
+		g_CRTC_MMP_Events[i].mode_switch = mmprofile_register_event(
+			crtc_mmp_root, "mode_switch");
+#ifdef CONFIG_MTK_MT6382_BDG
+		g_CRTC_MMP_Events[i].bdg_gce_irq = mmprofile_register_event(
+			crtc_mmp_root, "bdg_gce_irq");
+#endif
 	}
 }
 void drm_mmp_init(void)
@@ -333,6 +331,7 @@ int mtk_drm_mmp_ovl_layer(struct mtk_plane_state *state,
 		return -1;
 	}
 
+	memset(&meta, 0, sizeof(struct mmp_metadata_t));
 	memset(&bitmap, 0, sizeof(struct mmp_metadata_bitmap_t));
 	bitmap.data1 = 0;
 	bitmap.width = pending->width;

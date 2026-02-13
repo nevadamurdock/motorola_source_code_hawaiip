@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #include <linux/delay.h>
 #include <linux/sched.h>
@@ -180,9 +172,10 @@ static unsigned int _need_lfr_check(void);
 static int od_need_start;
 #endif
 
-#ifdef MTK_FB_MMDVFS_SUPPORT
 /* dvfs */
-static int dvfs_last_ovl_req = HRT_LEVEL_HPM;
+#ifdef MTK_FB_MMDVFS_SUPPORT
+static int dvfs_last_ovl_req = HRT_LEVEL_NUM - 1;
+static unsigned int ovl_throughput_freq_req;
 #endif
 
 /* delayed trigger */
@@ -4269,7 +4262,6 @@ int primary_display_suspend(void)
 /* pgc->state = DISP_SLEPT; */
 done:
 	primary_set_state(DISP_SLEPT);
-	dvfsrc_mdsrclkena_control_nolock(0);
 
 	if (primary_display_get_power_mode_nolock() == DOZE_SUSPEND)
 		primary_display_esd_check_enable(0);
@@ -4278,8 +4270,6 @@ done:
 	disp_sw_mutex_unlock(&(pgc->capture_lock));
 	_primary_path_switch_dst_unlock();
 
-	aee_kernel_wdt_kick_Powkey_api("mtkfb_early_suspend",
-				       WDT_SETBY_Display);
 	primary_trigger_cnt = 0;
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_suspend,
 			 MMPROFILE_FLAG_END, 0, 0);
@@ -4388,7 +4378,6 @@ int primary_display_resume(void)
 		if (dsi_force_config)
 			DSI_ForceConfig(1);
 	}
-	dvfsrc_mdsrclkena_control_nolock(1);
 	DISPDBG("dpmanager path power on[begin]\n");
 	primary_display_power_control(1);
 
@@ -4688,7 +4677,7 @@ done:
 	_primary_path_unlock(__func__);
 	DISPMSG("skip_update:%d\n", skip_update);
 
-	aee_kernel_wdt_kick_Powkey_api("mtkfb_late_resume", WDT_SETBY_Display);
+	//aee_kernel_wdt_kick_Powkey_api("mtkfb_late_resume", WDT_SETBY_Display);
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_resume,
 			 MMPROFILE_FLAG_END, 0, 0);
 	return ret;
@@ -4870,13 +4859,8 @@ static int primary_display_trigger_nolock(int blocking, void *callback,
 	smart_ovl_try_switch_mode_nolock();
 
 	atomic_set(&delayed_trigger_kick, 1);
-done:
-	if ((primary_trigger_cnt > 1) && aee_kernel_Powerkey_is_press()) {
-		aee_kernel_wdt_kick_Powkey_api("primary_display_trigger",
-					       WDT_SETBY_Display);
-		primary_trigger_cnt = 0;
-	}
 
+done:
 	if (pgc->session_id > 0)
 		update_frm_seq_info(0, 0, 0, FRM_TRIGGER);
 
@@ -7235,75 +7219,6 @@ static int _screen_cap_by_cpu(unsigned int mva, enum UNIFIED_COLOR_FMT ufmt,
 	dpmgr_path_memout_clock(pgc->dpmgr_handle, 0);
 	_primary_path_unlock(__func__);
 	return 0;
-}
-
-int primary_display_capture_framebuffer_ovl(unsigned long pbuf,
-					    enum UNIFIED_COLOR_FMT ufmt)
-{
-	int ret = 0;
-	struct m4u_client_t *m4uClient = NULL;
-	unsigned int mva = 0;
-	unsigned int w_xres = primary_display_get_width();
-	unsigned int h_yres = primary_display_get_height();
-	unsigned int pixel_byte = primary_display_get_bpp() / 8;
-	int buffer_size = h_yres * w_xres * pixel_byte;
-	enum DISP_MODULE_ENUM after_eng = DISP_MODULE_OVL0;
-	int tmp;
-
-	DISPMSG("primary capture: begin\n");
-
-	disp_sw_mutex_lock(&(pgc->capture_lock));
-
-	if (primary_display_is_sleepd()) {
-		memset((void *)pbuf, 0, buffer_size);
-		DISPMSG("primary capture: Fail black End\n");
-		goto out;
-	}
-
-	m4uClient = m4u_create_client();
-	if (m4uClient == NULL) {
-		DISPERR("primary capture:Fail to alloc  m4uClient\n");
-		ret = -1;
-		goto out;
-	}
-
-	ret = m4u_alloc_mva(m4uClient, DISP_M4U_PORT_DISP_WDMA0, pbuf, NULL,
-			    buffer_size, M4U_PROT_READ | M4U_PROT_WRITE,
-			    0, &mva);
-	if (ret) {
-		DISPERR("primary capture:Fail to allocate mva\n");
-		ret = -1;
-		goto out;
-	}
-
-	ret = m4u_cache_sync(m4uClient, DISP_M4U_PORT_DISP_WDMA0, pbuf,
-			     buffer_size, mva, M4U_CACHE_FLUSH_ALL);
-	if (ret) {
-		DISPERR("primary capture:Fail to cach sync\n");
-		ret = -1;
-		goto out;
-	}
-	tmp = disp_helper_get_option(DISP_OPT_SCREEN_CAP_FROM_DITHER);
-	if (tmp == 0)
-		after_eng = DISP_MODULE_OVL0;
-
-	if (primary_display_cmdq_enabled())
-		_screen_cap_by_cmdq(mva, ufmt, after_eng);
-	else
-		_screen_cap_by_cpu(mva, ufmt, after_eng);
-
-	ret = m4u_cache_sync(m4uClient, DISP_M4U_PORT_DISP_WDMA0, pbuf,
-			     buffer_size, mva, M4U_CACHE_FLUSH_BY_RANGE);
-out:
-	if (mva > 0)
-		m4u_dealloc_mva(m4uClient, DISP_M4U_PORT_DISP_WDMA0, mva);
-
-	if (m4uClient)
-		m4u_destroy_client(m4uClient);
-
-	disp_sw_mutex_unlock(&(pgc->capture_lock));
-	DISPMSG("primary capture: end\n");
-	return ret;
 }
 
 int primary_display_capture_framebuffer(unsigned long pbuf)

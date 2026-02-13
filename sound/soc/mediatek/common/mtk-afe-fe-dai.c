@@ -1,17 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * mtk-afe-fe-dais.c  --  Mediatek afe fe dai operator
  *
  * Copyright (c) 2016 MediaTek Inc.
  * Author: Garlic Tseng <garlic.tseng@mediatek.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/io.h>
@@ -19,11 +11,14 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <sound/soc.h>
+#include "mtk-afe-platform-driver.h"
 #include <sound/pcm_params.h>
-
 #include "mtk-afe-fe-dai.h"
 #include "mtk-base-afe.h"
+
+#if defined(CONFIG_MTK_VOW_BARGE_IN_SUPPORT)
 #include "../scp_vow/mtk-scp-vow-common.h"
+#endif
 
 #if defined(CONFIG_MTK_ION)
 #include "mtk-mmap-ion.h"
@@ -35,8 +30,8 @@
 
 /* dsp relate */
 #if defined(CONFIG_SND_SOC_MTK_AUDIO_DSP)
-#include "../audio_dsp/mtk-dsp-common_define.h"
-#include "../audio_dsp/mtk-dsp-common.h"
+#include "mtk-dsp-common_define.h"
+#include "mtk-dsp-common.h"
 #endif
 
 #if defined(CONFIG_MTK_AUDIODSP_SUPPORT)
@@ -135,7 +130,7 @@ void mtk_afe_fe_shutdown(struct snd_pcm_substream *substream,
 			 struct snd_soc_dai *dai)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(rtd->platform);
+	struct mtk_base_afe *afe = snd_soc_dai_get_drvdata(dai);
 	struct mtk_base_afe_memif *memif = &afe->memif[rtd->cpu_dai->id];
 	int irq_id;
 
@@ -166,7 +161,7 @@ int mtk_afe_fe_hw_params(struct snd_pcm_substream *substream,
 	unsigned int rate = params_rate(params);
 	snd_pcm_format_t format = params_format(params);
 
-#if defined(CONFIG_MTK_ION)
+#if defined(CONFIG_MTK_ION) && defined(MMAP_SUPPORT)
 	// mmap don't alloc buffer
 	if (memif->use_mmap_share_mem != 0) {
 		unsigned long phy_addr;
@@ -211,7 +206,7 @@ int mtk_afe_fe_hw_params(struct snd_pcm_substream *substream,
 
 	substream->runtime->dma_bytes = params_buffer_bytes(params);
 
-#if defined(CONFIG_MTK_VOW_SUPPORT)
+#if defined(CONFIG_MTK_VOW_BARGE_IN_SUPPORT)
 	if (memif->vow_bargein_enable) {
 		ret = allocate_vow_bargein_mem(substream,
 					       &substream->runtime->dma_addr,
@@ -219,7 +214,6 @@ int mtk_afe_fe_hw_params(struct snd_pcm_substream *substream,
 					       substream->runtime->dma_bytes,
 					       params_format(params),
 					       afe);
-
 		if (ret < 0)
 			return ret;
 
@@ -309,7 +303,7 @@ int mtk_afe_fe_hw_params(struct snd_pcm_substream *substream,
 #endif
 
 
-#if defined(CONFIG_MTK_ION)
+#if defined(CONFIG_MTK_ION) && defined(MMAP_SUPPORT)
 END:
 #endif
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
@@ -330,7 +324,7 @@ END:
 		return ret;
 	}
 
-#if defined(CONFIG_MTK_VOW_SUPPORT) ||\
+#if defined(CONFIG_MTK_VOW_BARGE_IN_SUPPORT) ||\
 		defined(CONFIG_SND_SOC_MTK_SCP_SMARTPA) ||\
 		defined(CONFIG_MTK_ULTRASND_PROXIMITY)
 BYPASS_AFE_FE_ALLOCATE_MEM:
@@ -567,7 +561,7 @@ EXPORT_SYMBOL_GPL(mtk_dynamic_irq_release);
 
 int mtk_afe_dai_suspend(struct snd_soc_dai *dai)
 {
-	struct mtk_base_afe *afe = dev_get_drvdata(dai->dev);
+	struct mtk_base_afe *afe = snd_soc_dai_get_drvdata(dai);
 	struct device *dev = afe->dev;
 	struct regmap *regmap = afe->regmap;
 	int i;
@@ -592,7 +586,7 @@ EXPORT_SYMBOL_GPL(mtk_afe_dai_suspend);
 
 int mtk_afe_dai_resume(struct snd_soc_dai *dai)
 {
-	struct mtk_base_afe *afe = dev_get_drvdata(dai->dev);
+	struct mtk_base_afe *afe = snd_soc_dai_get_drvdata(dai);
 	struct device *dev = afe->dev;
 	struct regmap *regmap = afe->regmap;
 	int i = 0;
@@ -653,7 +647,11 @@ int mtk_dsp_memif_set_enable(struct mtk_base_afe *afe, int id)
 #if defined(CONFIG_MTK_AUDIODSP_SUPPORT) && defined(CONFIG_SND_SOC_MTK_AUDIO_DSP)
 	int adsp_sem_ret = ADSP_ERROR;
 
+#ifdef AUDIO_DSP_V1
+	if (adsp_feature_is_active())
+#else
 	if (is_adsp_feature_in_active())
+#endif
 		adsp_sem_ret = get_adsp_semaphore(SEMA_AUDIOREG);
 	/* get sem ok*/
 	if (adsp_sem_ret == ADSP_OK) {
@@ -674,8 +672,11 @@ int mtk_dsp_memif_set_disable(struct mtk_base_afe *afe, int id)
 	int ret = 0;
 #if defined(CONFIG_MTK_AUDIODSP_SUPPORT) && defined(CONFIG_SND_SOC_MTK_AUDIO_DSP)
 	int adsp_sem_ret = ADSP_ERROR;
-
+#ifdef AUDIO_DSP_V1
+	if (adsp_feature_is_active())
+#else
 	if (is_adsp_feature_in_active())
+#endif
 		adsp_sem_ret = get_adsp_semaphore(SEMA_AUDIOREG);
 	/* get sem ok*/
 	if (adsp_sem_ret == ADSP_OK) {
@@ -705,7 +706,11 @@ int mtk_dsp_irq_set_enable(struct mtk_base_afe *afe,
 	if (!irq_data)
 		return -EPERM;
 #if defined(CONFIG_MTK_AUDIODSP_SUPPORT) && defined(CONFIG_SND_SOC_MTK_AUDIO_DSP)
+#ifdef AUDIO_DSP_V1
+	if (adsp_feature_is_active())
+#else
 	if (is_adsp_feature_in_active())
+#endif
 		adsp_sem_ret = get_adsp_semaphore(SEMA_AUDIOREG);
 	/* get sem ok*/
 	if (adsp_sem_ret == ADSP_OK) {
@@ -739,7 +744,11 @@ int mtk_dsp_irq_set_disable(struct mtk_base_afe *afe,
 		return -EPERM;
 
 #if defined(CONFIG_MTK_AUDIODSP_SUPPORT) && defined(CONFIG_SND_SOC_MTK_AUDIO_DSP)
+#ifdef AUDIO_DSP_V1
+	if (adsp_feature_is_active())
+#else
 	if (is_adsp_feature_in_active())
+#endif
 		adsp_sem_ret = get_adsp_semaphore(SEMA_AUDIOREG);
 
 	/* get sem ok*/
@@ -872,7 +881,9 @@ int mtk_memif_set_rate_substream(struct snd_pcm_substream *substream,
 				 int id, unsigned int rate)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct mtk_base_afe *afe = snd_soc_platform_get_drvdata(rtd->platform);
+	struct snd_soc_component *component =
+		snd_soc_rtdcom_lookup(rtd, AFE_PCM_NAME);
+	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(component);
 	int fs = 0;
 
 	if (!afe->memif_fs) {
@@ -949,4 +960,3 @@ EXPORT_SYMBOL_GPL(mtk_memif_set_pbuf_size);
 MODULE_DESCRIPTION("Mediatek simple fe dai operator");
 MODULE_AUTHOR("Garlic Tseng <garlic.tseng@mediatek.com>");
 MODULE_LICENSE("GPL v2");
-

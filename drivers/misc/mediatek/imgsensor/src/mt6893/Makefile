@@ -1,15 +1,5 @@
-#
-# Copyright (C) 2015 MediaTek Inc.
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License version 2 as
-# published by the Free Software Foundation.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
+# SPDX-License-Identifier: GPL-2.0
+
 #
 # Makefile for misc devices that really don't fit anywhere else.
 #
@@ -73,6 +63,6 @@ endif
 subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/common/$(COMMON_VERSION)/camera_hw
 
 # Enable parallelism
-subdir-ccflags-y += -DSENSOR_PARALLEISM
+# subdir-ccflags-y += -DNO_I2C_MTK -DSENSOR_PARALLEISM
 
 obj-y += seninf/

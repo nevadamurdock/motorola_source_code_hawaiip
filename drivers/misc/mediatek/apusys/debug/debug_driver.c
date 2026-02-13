@@ -1,15 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2019 MediaTek Inc.
- * Author: JB Tsai <jb.tsai@mediatek.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Copyright (c) 2020 MediaTek Inc.
  */
 
 #include <linux/platform_device.h>
@@ -313,7 +304,12 @@ static int debug_probe(struct platform_device *pdev)
 	}
 
 	pr_notice("debug probe done, dbglog_buf= 0x%p\n", dbglog_buf);
-	apusys_dump_init(&pdev->dev);
+	ret = apusys_dump_init(&pdev->dev);
+	if (ret) {
+		DBG_LOG_ERR("failed to create debug dump attr node(devinfo).\n");
+		goto out;
+	}
+
 	return 0;
 
 out:

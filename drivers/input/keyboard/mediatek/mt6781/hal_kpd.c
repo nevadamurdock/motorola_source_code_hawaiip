@@ -1,14 +1,7 @@
-/*
- * Copyright (C) 2016 MediaTek Inc.
+/* 
+ * SPDX-License-Identifier: GPL-2.0
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
 
 #include <linux/of.h>
@@ -28,6 +21,10 @@ static u16 kpd_keymap_state[KPD_NUM_MEMS] = {
 	0xffff, 0xffff, 0xffff, 0xffff, 0x00ff
 };
 
+unsigned int get_boot_mode(void)
+{
+	return 0;
+}
 
 static void enable_kpd(int enable)
 {
@@ -54,7 +51,7 @@ void kpd_get_keymap_state(u16 state[])
 void long_press_reboot_function_setting(void)
 {
 #ifdef CONFIG_MTK_PMIC_NEW_ARCH /*for pmic not ready*/
-	if (kpd_enable_lprst && get_boot_mode() == NORMAL_BOOT) {
+	if (kpd_enable_lprst && kpd_dts_data.boot_mode == NORMAL_BOOT) {
 		kpd_info("Normal Boot long press reboot selection\n");
 #ifdef CONFIG_KPD_PMIC_LPRST_TD
 		kpd_info("Enable normal mode LPRST\n");

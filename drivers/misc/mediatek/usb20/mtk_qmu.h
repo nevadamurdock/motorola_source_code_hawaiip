@@ -1,14 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (C) 2017 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
  */
 
 #ifndef _MTK_QMU_H_
@@ -52,7 +44,7 @@
 /*#define TXZLP NO_ZLP */
 
 /* #define CFG_RX_ZLP_EN */
-/* #define CFG_RX_COZ_EN */
+#define CFG_RX_COZ_EN
 
 #define CFG_CS_CHECK
 /* #define CFG_EMPTY_CHECK */

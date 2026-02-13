@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2015 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #ifndef MTK_DRM_CRTC_H
 #define MTK_DRM_CRTC_H
@@ -684,7 +676,7 @@ struct mtk_drm_crtc {
 	atomic_t vblank_enable_task_active;
 
 	char *wk_lock_name;
-	struct wakeup_source wk_lock;
+	struct wakeup_source *wk_lock;
 
 	struct mtk_drm_fake_vsync *fake_vsync;
 	struct mtk_drm_fake_layer fake_layer;
@@ -777,7 +769,7 @@ int mtk_drm_crtc_enable_vblank(struct drm_device *drm, unsigned int pipe);
 void mtk_drm_crtc_disable_vblank(struct drm_device *drm, unsigned int pipe);
 bool mtk_crtc_get_vblank_timestamp(struct drm_device *dev, unsigned int pipe,
 				 int *max_error,
-				 struct timeval *vblank_time,
+				 ktime_t *vblank_time,
 				 bool in_vblank_irq);
 void mtk_drm_crtc_commit(struct drm_crtc *crtc);
 void mtk_crtc_ddp_irq(struct drm_crtc *crtc, struct mtk_ddp_comp *comp);

@@ -1,14 +1,18 @@
+// SPDX-License-Identifier: GPL-2.0
+
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * Copyright (c) 2019 MediaTek Inc.
+ */
+
+/*
+ * GenieZone (hypervisor-based seucrity platform) enables hardware protected
+ * and isolated security execution environment, includes
+ * 1. GZ hypervisor
+ * 2. Hypervisor-TEE OS (built-in Trusty OS)
+ * 3. Drivers (ex: debug, communication and interrupt) for GZ and
+ *    hypervisor-TEE OS
+ * 4. GZ and hypervisor-TEE and GZ framework (supporting multiple TEE
+ *    ecosystem, ex: M-TEE, Trusty, GlobalPlatform, ...)
  */
 
 
@@ -95,7 +99,7 @@ struct completion ree_dummy_event;
 struct task_struct *ree_dummy_task;
 
 #if IS_ENABLED(CONFIG_PM_SLEEP)
-struct wakeup_source TeeServiceCall_wake_lock; /*4.14*/
+struct wakeup_source *TeeServiceCall_wake_lock; /*4.19*/
 #endif
 
  /* only need to open sys service once */
@@ -313,7 +317,7 @@ static int _tipc_k_connect_retry(struct tipc_k_handle *h, const char *port_name)
 		if (unlikely(IS_RESTARTSYS_ERROR(rc))) {
 			struct tipc_dn_chan *dn = h->dn;
 
-			if (_is_tipc_channel_connected(dn)) {
+			if (dn && _is_tipc_channel_connected(dn)) {
 				KREE_DEBUG(
 					"%s: channel is connected already!\n",
 					__func__);
@@ -472,7 +476,7 @@ static TZ_RESULT KREE_OpenSysFd(uint32_t tee_id)
 
 static TZ_RESULT KREE_OpenFd(const char *port, int32_t *Fd)
 {
-	struct tipc_k_handle h;
+	struct tipc_k_handle h = {.dn = NULL};
 	TZ_RESULT ret = TZ_RESULT_SUCCESS;
 	int32_t tmp;
 
@@ -1146,7 +1150,7 @@ static void kree_perf_boost(int enable)
 		if (perf_boost_cnt == 0) {
 			KREE_DEBUG("%s wake_lock\n", __func__);
 #if IS_ENABLED(CONFIG_PM_SLEEP)
-			__pm_stay_awake(&TeeServiceCall_wake_lock); /*4.14*/
+			__pm_stay_awake(TeeServiceCall_wake_lock); /*4.19*/
 #endif
 		}
 		perf_boost_cnt++;
@@ -1154,7 +1158,7 @@ static void kree_perf_boost(int enable)
 		if (perf_boost_cnt == 1) {
 			KREE_DEBUG("%s wake_unlock\n", __func__);
 #if IS_ENABLED(CONFIG_PM_SLEEP)
-			__pm_relax(&TeeServiceCall_wake_lock); /*4.14*/
+			__pm_relax(TeeServiceCall_wake_lock); /*4.19*/
 #endif
 		}
 		if (perf_boost_cnt > 0)
@@ -1233,44 +1237,6 @@ create_session_out:
 	return ret;
 }
 EXPORT_SYMBOL(KREE_CreateSession);
-
-/*fix mtee sync*/
-TZ_RESULT KREE_CreateSessionWithTag(const char *ta_uuid,
-				    KREE_SESSION_HANDLE *pHandle,
-				    const char *tag)
-{
-#if debugFg
-	uint32_t paramTypes;
-	union MTEEC_PARAM param[4];
-	TZ_RESULT ret;
-
-	if (!ta_uuid || !pHandle)
-		return TZ_RESULT_ERROR_BAD_PARAMETERS;
-
-	param[0].mem.buffer = (char *)ta_uuid;
-	param[0].mem.size = strnlen(ta_uuid, MAX_UUID_LEN) + 1;
-	param[1].mem.buffer = (char *)tag;
-	if (tag != NULL && strlen(tag) != 0)
-		param[1].mem.size = strlen(tag) + 1;
-	else
-		param[1].mem.size = 0;
-	paramTypes = TZ_ParamTypes3(TZPT_MEM_INPUT,
-					TZPT_MEM_INPUT,
-					TZPT_VALUE_OUTPUT);
-
-	ret = KREE_TeeServiceCall(
-			(KREE_SESSION_HANDLE) MTEE_SESSION_HANDLE_SYSTEM,
-			TZCMD_SYS_SESSION_CREATE_WITH_TAG, paramTypes, param);
-
-	if (ret == TZ_RESULT_SUCCESS)
-		*pHandle = (KREE_SESSION_HANDLE)param[2].value.a;
-
-	return ret;
-#endif
-	KREE_DEBUG(" ===> %s: not support!\n", __func__);
-	return -1;
-}
-EXPORT_SYMBOL(KREE_CreateSessionWithTag);
 
 TZ_RESULT KREE_CloseSession(KREE_SESSION_HANDLE handle)
 {
@@ -1357,6 +1323,8 @@ TZ_RESULT KREE_TeeServiceCallPlus(KREE_SESSION_HANDLE handle, uint32_t command,
 		KREE_ERR("%s: port is not found\n", __func__);
 		return TZ_RESULT_ERROR_BAD_PARAMETERS;
 	}
+
+	memset(&cparam, 0, sizeof(cparam));
 
 	cparam.command = command;
 	cparam.paramTypes = paramTypes;

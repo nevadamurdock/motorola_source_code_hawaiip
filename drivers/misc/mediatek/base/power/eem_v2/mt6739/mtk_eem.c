@@ -1,14 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
-* Copyright (C) 2017 MediaTek Inc.
-*
-* This program is free software; you can redistribute it and/or modify
-* it under the terms of the GNU General Public License version 2 as
-* published by the Free Software Foundation.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-* See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ * Copyright (c) 2019 MediaTek Inc.
 */
 
 /**
@@ -2007,10 +1999,6 @@ static void eem_set_eem_volt(struct eem_det *det)
 	unsigned i;
 	int low_temp_offset = 0;
 	struct eem_ctrl *ctrl = id_to_eem_ctrl(det->ctrl_id);
-
-	if (ctrl == NULL)
-		return;
-
 	#if ITurbo
 	ITurboRunSet = 0;
 	#endif
@@ -2581,8 +2569,10 @@ static inline void handle_mon_mode_isr(struct eem_det *det)
 {
 	unsigned int i, verr = 0;
 	#if defined(CONFIG_THERMAL) && !defined(EARLY_PORTING_THERMAL)
+#ifdef CONFIG_EEM_AEE_RR_REC
 	unsigned long long temp_long;
 	unsigned long long temp_cur = (unsigned long long)aee_rr_curr_ptp_temp();
+#endif
 	#endif
 
 	FUNC_ENTER(FUNC_LV_LOCAL);

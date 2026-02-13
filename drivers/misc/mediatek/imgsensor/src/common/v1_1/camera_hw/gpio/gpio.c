@@ -1,14 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2017 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
 
 #include "gpio.h"
@@ -146,8 +138,7 @@ static enum IMGSENSOR_RETURN gpio_set(
 		pin > IMGSENSOR_HW_PIN_DOVDD ||
 #endif
 		pin_state < IMGSENSOR_HW_PIN_STATE_LEVEL_0 ||
-		pin_state > IMGSENSOR_HW_PIN_STATE_LEVEL_HIGH ||
-		sensor_idx < 0)
+		pin_state > IMGSENSOR_HW_PIN_STATE_LEVEL_HIGH)
 		return IMGSENSOR_RETURN_ERROR;
 
 	gpio_state = (pin_state > IMGSENSOR_HW_PIN_STATE_LEVEL_0)
@@ -164,7 +155,7 @@ static enum IMGSENSOR_RETURN gpio_set(
 #endif
 	{
 		ppinctrl_state =
-			pgpio->ppinctrl_state_cam[sensor_idx][
+			pgpio->ppinctrl_state_cam[(unsigned int)sensor_idx][
 			((pin - IMGSENSOR_HW_PIN_PDN) << 1) + gpio_state];
 	}
 

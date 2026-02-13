@@ -1,14 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2021 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * Copyright (C) 2016 MediaTek Inc.
  */
 
 #include "vdec_fmt_pm.h"
@@ -16,10 +8,11 @@
 #include "vdec_fmt_utils.h"
 #include <linux/clk.h>
 
+#include <linux/soc/mediatek/mtk-pm-qos.h>
 #include <mmdvfs_pmqos.h>
 #include "smi_public.h"
 
-static struct pm_qos_request fmt_qos_req_f;
+static struct mtk_pm_qos_request fmt_qos_req_f;
 static u32 fmt_freq_step_size;
 static u64 fmt_freq_steps[MAX_FREQ_STEP];
 
@@ -94,7 +87,7 @@ void fmt_prepare_dvfs_emi_bw(void)
 {
 	int ret, i;
 
-	pm_qos_add_request(&fmt_qos_req_f, PM_QOS_VDEC_FREQ,
+	mtk_pm_qos_add_request(&fmt_qos_req_f, PM_QOS_VDEC_FREQ,
 				PM_QOS_DEFAULT_VALUE);
 	fmt_freq_step_size = 1;
 	ret = mmdvfs_qos_get_freq_steps(PM_QOS_VDEC_FREQ, &fmt_freq_steps[0],
@@ -116,8 +109,8 @@ void fmt_unprepare_dvfs_emi_bw(void)
 	int freq_idx = 0;
 
 	freq_idx = (fmt_freq_step_size == 0) ? 0 : (fmt_freq_step_size - 1);
-	pm_qos_update_request(&fmt_qos_req_f, fmt_freq_steps[freq_idx]);
-	pm_qos_remove_request(&fmt_qos_req_f);
+	mtk_pm_qos_update_request(&fmt_qos_req_f, fmt_freq_steps[freq_idx]);
+	mtk_pm_qos_remove_request(&fmt_qos_req_f);
 
 	mm_qos_remove_all_request(&fmt_rlist[0]);
 }
@@ -147,7 +140,7 @@ void fmt_start_dvfs_emi_bw(struct fmt_pmqos pmqos_param)
 
 	fmt_debug(1, "request_freq %d", request_freq);
 
-	pm_qos_update_request(&fmt_qos_req_f, request_freq);
+	mtk_pm_qos_update_request(&fmt_qos_req_f, request_freq);
 	FMT_BANDWIDTH(pmqos_param.rdma_datasize, pmqos_param.pixel_size, request_freq, bandwidth);
 	mm_qos_set_request(&fmt_rdma_request[0], bandwidth, 0, BW_COMP_NONE);
 	fmt_debug(1, "rdma bandwidth %d", bandwidth);
@@ -159,7 +152,7 @@ void fmt_start_dvfs_emi_bw(struct fmt_pmqos pmqos_param)
 
 void fmt_end_dvfs_emi_bw(void)
 {
-	pm_qos_update_request(&fmt_qos_req_f, 0);
+	mtk_pm_qos_update_request(&fmt_qos_req_f, 0);
 
 	mm_qos_set_request(&fmt_rdma_request[0], 0, 0, BW_COMP_NONE);
 	mm_qos_set_request(&fmt_wdma_request[0], 0, 0, BW_COMP_NONE);

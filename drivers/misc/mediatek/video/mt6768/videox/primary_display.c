@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #include <linux/delay.h>
 #include <linux/sched.h>
@@ -80,9 +72,11 @@
 
 #include "ddp_clkmgr.h"
 #ifdef MTK_FB_MMDVFS_SUPPORT
-//#include "mmdvfs_mgr.h"
-#include "mtk_vcorefs_governor.h"
-#include "mtk_vcorefs_manager.h"
+#ifdef CONFIG_MTK_SMI_EXT
+#include "mmdvfs_mgr.h"
+#endif
+/* #include "mtk_vcorefs_governor.h" */
+/* #include "mtk_vcorefs_manager.h" */
 #endif
 
 #include "ddp_disp_bdg.h"
@@ -97,7 +91,7 @@
 #include "ddp_aal.h"
 #include "ddp_gamma.h"
 #ifdef MTK_FB_MMDVFS_SUPPORT
-#include <linux/pm_qos.h>
+#include <linux/soc/mediatek/mtk-pm-qos.h>
 #endif
 
 #define MMSYS_CLK_LOW (0)
@@ -155,9 +149,9 @@ static struct task_struct *decouple_update_rdma_config_thread;
 static struct task_struct *decouple_trigger_thread;
 static struct task_struct *init_decouple_buffer_thread;
 #ifdef MTK_FB_MMDVFS_SUPPORT
-struct pm_qos_request primary_display_qos_request;
-struct pm_qos_request primary_display_emi_opp_request;
-struct pm_qos_request primary_display_mm_freq_request;
+struct mtk_pm_qos_request primary_display_qos_request;
+struct mtk_pm_qos_request primary_display_emi_opp_request;
+struct mtk_pm_qos_request primary_display_mm_freq_request;
 #endif
 
 static int decouple_mirror_update_rdma_config_thread(void *data);
@@ -219,7 +213,7 @@ static int primary_display_get_round_corner_mva(
 
 /* Must manipulate wake lock through lock_primary_wake_lock() */
 /* hold the wakelock to make kernel awake when primary display is on*/
-struct wakeup_source pri_wk_lock;
+struct wakeup_source* pri_wk_lock;
 
 /*DynFPS for debug*/
 bool g_force_cfg;
@@ -235,13 +229,13 @@ void lock_primary_wake_lock(bool lock)
 			DISPMSG("wake lock already held...\n");
 		else {
 			DISPMSG("hold the wakelock...\n");
-			__pm_stay_awake(&pri_wk_lock);
+			__pm_stay_awake(pri_wk_lock);
 			is_locked = 1;
 		}
 	} else {
 		if (is_locked) {
 			DISPMSG("release wakelock...\n");
-			__pm_relax(&pri_wk_lock);
+			__pm_relax(pri_wk_lock);
 			is_locked = 0;
 		} else
 			DISPMSG("wake lock already free...\n");
@@ -3465,7 +3459,7 @@ static int _ovl_fence_release_callback(unsigned long userdata)
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_pm_qos,
 			MMPROFILE_FLAG_START,
 			!primary_display_is_decouple_mode(), bandwidth);
-	pm_qos_update_request(&primary_display_qos_request, bandwidth);
+	mtk_pm_qos_update_request(&primary_display_qos_request, bandwidth);
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_pm_qos,
 			MMPROFILE_FLAG_END,
 			!primary_display_is_decouple_mode(), bandwidth);
@@ -3885,11 +3879,12 @@ int primary_display_init(char *lcm_name, unsigned int lcm_fps,
 			disp_helper_get_option(DISP_OPT_FPS_EXT_INTERVAL));
 
 #ifdef MTK_FB_MMDVFS_SUPPORT
-	pm_qos_add_request(&primary_display_qos_request,
-		PM_QOS_MM_MEMORY_BANDWIDTH, PM_QOS_DEFAULT_VALUE);
-	pm_qos_add_request(&primary_display_emi_opp_request,
-		PM_QOS_DDR_OPP, PM_QOS_DDR_OPP_DEFAULT_VALUE);
-	pm_qos_add_request(&primary_display_mm_freq_request,
+	mtk_pm_qos_add_request(&primary_display_qos_request,
+		MTK_PM_QOS_MEMORY_BANDWIDTH,
+		MTK_PM_QOS_MEMORY_BANDWIDTH_DEFAULT_VALUE);
+	mtk_pm_qos_add_request(&primary_display_emi_opp_request,
+		MTK_PM_QOS_DDR_OPP, MTK_PM_QOS_DDR_OPP_DEFAULT_VALUE);
+	mtk_pm_qos_add_request(&primary_display_mm_freq_request,
 		PM_QOS_DISP_FREQ, PM_QOS_MM_FREQ_DEFAULT_VALUE);
 #endif
 
@@ -4239,9 +4234,9 @@ int primary_display_init(char *lcm_name, unsigned int lcm_fps,
 	DISPCHECK("%s done\n", __func__);
 
 done:
-	DISPCHECK("init and hold wakelock...\n");
-	wakeup_source_init(&pri_wk_lock, "pri_disp_wakelock");
-	lock_primary_wake_lock(1);
+	DISPDBG("init and hold wakelock...\n");
+	pri_wk_lock = wakeup_source_register(NULL, "pri_disp_wakelock");
+	__pm_stay_awake(pri_wk_lock);
 
 	if (disp_helper_get_stage() != DISP_HELPER_STAGE_NORMAL)
 		primary_display_diagnose();
@@ -4512,9 +4507,9 @@ int primary_display_deinit(void)
 	_primary_path_unlock(__func__);
 
 #ifdef MTK_FB_MMDVFS_SUPPORT
-	pm_qos_remove_request(&primary_display_qos_request);
-	pm_qos_remove_request(&primary_display_emi_opp_request);
-	pm_qos_remove_request(&primary_display_mm_freq_request);
+	mtk_pm_qos_remove_request(&primary_display_qos_request);
+	mtk_pm_qos_remove_request(&primary_display_emi_opp_request);
+	mtk_pm_qos_remove_request(&primary_display_mm_freq_request);
 #endif
 
 	return 0;
@@ -4874,7 +4869,7 @@ int primary_display_suspend(void)
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_pm_qos,
 			MMPROFILE_FLAG_START,
 			!primary_display_is_decouple_mode(), 0);
-	pm_qos_update_request(&primary_display_qos_request, 0);
+	mtk_pm_qos_update_request(&primary_display_qos_request, 0);
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_pm_qos,
 			MMPROFILE_FLAG_END,
 			!primary_display_is_decouple_mode(), 0);
@@ -4909,9 +4904,11 @@ done:
 	disp_sw_mutex_unlock(&(pgc->capture_lock));
 	_primary_path_switch_dst_unlock();
 
+#if 0
 #ifdef CONFIG_MTK_AEE_FEATURE
 	aee_kernel_wdt_kick_Powkey_api("mtkfb_early_suspend",
 		WDT_SETBY_Display);
+#endif
 #endif
 	primary_trigger_cnt = 0;
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_suspend,
@@ -5357,7 +5354,7 @@ int primary_display_resume(void)
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_pm_qos,
 			MMPROFILE_FLAG_START,
 			!primary_display_is_decouple_mode(), bandwidth);
-	pm_qos_update_request(&primary_display_qos_request, bandwidth);
+	mtk_pm_qos_update_request(&primary_display_qos_request, bandwidth);
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_pm_qos,
 			MMPROFILE_FLAG_END,
 			!primary_display_is_decouple_mode(), bandwidth);
@@ -5422,9 +5419,11 @@ done:
 	_primary_path_unlock(__func__);
 	DISPMSG("skip_update:%d\n", skip_update);
 
+#if 0
 #ifdef CONFIG_MTK_AEE_FEATURE
 	aee_kernel_wdt_kick_Powkey_api("mtkfb_late_resume",
 		WDT_SETBY_Display);
+#endif
 #endif
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_resume,
 		MMPROFILE_FLAG_END, 0, 0);
@@ -5803,12 +5802,14 @@ static int primary_display_trigger_nolock(int blocking, void *callback,
 	atomic_set(&delayed_trigger_kick, 1);
 
 done:
+#if 0
 #ifdef CONFIG_MTK_AEE_FEATURE
 	if ((primary_trigger_cnt > 1) && aee_kernel_Powerkey_is_press()) {
 		aee_kernel_wdt_kick_Powkey_api("primary_display_trigger",
 			WDT_SETBY_Display);
 		primary_trigger_cnt = 0;
 	}
+#endif
 #endif
 	if (pgc->session_id > 0)
 		update_frm_seq_info(0, 0, 0, FRM_TRIGGER);
@@ -8862,6 +8863,7 @@ int primary_display_capture_framebuffer_ovl(unsigned long pbuf,
 
 	disp_sw_mutex_lock(&(pgc->capture_lock));
 
+#if 0 //m4u_cache_sync disabled now? add by SI
 #ifdef CONFIG_MTK_M4U
 	if (primary_display_is_sleepd()) {
 		memset((void *)pbuf, 0, buffer_size);
@@ -8911,6 +8913,7 @@ out:
 	if (m4uClient != 0)
 		m4u_destroy_client(m4uClient);
 #endif
+#endif //phase out
 	disp_sw_mutex_unlock(&(pgc->capture_lock));
 	DISPMSG("primary capture: end\n");
 	return ret;
@@ -10297,7 +10300,7 @@ void primary_display_dynfps_chg_fps(int cfg_id)
 		}
 		cmdqRecReset(qhandle);
 
-		if (bdg_is_bdg_connected() != 1) {
+		if (!pgc->vfp_chg_sync_bdg) {
 			if (need_send_cmd) {
 				cmdqRecWait(qhandle, CMDQ_EVENT_MUTEX0_STREAM_EOF);
 				DISPMSG("%s,send cmd to lcm in VFP solution\n", __func__);
@@ -10311,24 +10314,26 @@ void primary_display_dynfps_chg_fps(int cfg_id)
 
 			cmdqRecFlushAsync(qhandle);
 		} else {
-			cmdqRecWait(qhandle, CMDQ_EVENT_MUTEX0_STREAM_EOF);
+			if (bdg_is_bdg_connected() == 1) {
+				cmdqRecWait(qhandle, CMDQ_EVENT_MUTEX0_STREAM_EOF);
 
-			/* stop dsi vdo mode */
-			dpmgr_path_build_cmdq(primary_get_dpmgr_handle(),
-				qhandle, CMDQ_STOP_VDO_MODE, 0);
+				/* stop dsi vdo mode */
+				dpmgr_path_build_cmdq(primary_get_dpmgr_handle(),
+					qhandle, CMDQ_STOP_VDO_MODE, 0);
 
-			ddp_dsi_dynfps_chg_fps(DISP_MODULE_DSI0, qhandle,
-			last_dynfps, new_dynfps, fps_change_index);
+				ddp_dsi_dynfps_chg_fps(DISP_MODULE_DSI0, qhandle,
+					last_dynfps, new_dynfps, fps_change_index);
 
-			dpmgr_path_build_cmdq(primary_get_dpmgr_handle(), qhandle,
-				CMDQ_START_VDO_MODE, 0);
-			dpmgr_path_trigger(primary_get_dpmgr_handle(),
-				qhandle, CMDQ_ENABLE);
+				dpmgr_path_build_cmdq(primary_get_dpmgr_handle(), qhandle,
+					CMDQ_START_VDO_MODE, 0);
+				dpmgr_path_trigger(primary_get_dpmgr_handle(),
+					qhandle, CMDQ_ENABLE);
 
-			ddp_mutex_set_sof_wait(dpmgr_path_get_mutex(
-				primary_get_dpmgr_handle()), qhandle, 0);
+				ddp_mutex_set_sof_wait(dpmgr_path_get_mutex(
+					primary_get_dpmgr_handle()), qhandle, 0);
 
-			cmdqRecFlush(qhandle);
+				cmdqRecFlush(qhandle);
+			}
 		}
 	}
 	cmdqRecDestroy(qhandle);

@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #include <generated/autoconf.h>
 #include <linux/module.h>
@@ -1117,7 +1109,7 @@ static int mtkfb_ioctl(struct fb_info *info, unsigned int cmd,
 
 		aod_pm = (enum mtkfb_aod_power_mode)arg;
 		DISPCHECK("AOD: ioctl: %s\n",
-			  aod_pm ? "AOD_DOZE_SUSPEND" : "AOD_DOZE");
+			aod_pm != MTKFB_AOD_DOZE  ? "AOD_DOZE_SUSPEND" : "AOD_DOZE");
 
 		if (!primary_is_aod_supported()) {
 			DISPCHECK("AOD: feature not support\n");
@@ -1153,7 +1145,7 @@ static int mtkfb_ioctl(struct fb_info *info, unsigned int cmd,
 		}
 		if (ret < 0)
 			DISPERR("AOD: set %s failed\n",
-				aod_pm ? "AOD_SUSPEND" : "AOD_RESUME");
+				aod_pm != MTKFB_AOD_DOZE ? "AOD_SUSPEND" : "AOD_RESUME");
 
 		break;
 	}

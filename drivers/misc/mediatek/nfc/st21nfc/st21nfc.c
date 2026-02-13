@@ -61,7 +61,7 @@
 #ifdef KRNMTKLEGACY_CLK
 #include <mt_clkbuf_ctl.h>
 #else
-#include <mtk_clkbuf_ctl.h>
+#include <mtk-clkbuf-bridge.h>
 #endif
 #endif
 
@@ -286,7 +286,8 @@ static int st21nfc_loc_set_polaritymode(
 	st21nfc_dev->irq_enabled = true;
 
 	ret = devm_request_irq(dev, client->irq, st21nfc_dev_irq_handler,
-						   st21nfc_dev->polarity_mode | IRQF_NO_SUSPEND,
+						   st21nfc_dev->polarity_mode |
+						   IRQF_NO_SUSPEND,
 						   client->name, st21nfc_dev);
 
 	if (ret) {

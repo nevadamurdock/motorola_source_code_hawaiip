@@ -23,7 +23,15 @@ obj-$(CONFIG_MTK_LCM) += mt65xx_lcm_list.o        \
                          lcm_util.o
 
 LCM_LISTS := $(subst ",,$(CONFIG_CUSTOM_KERNEL_LCM))
-obj-$(CONFIG_MTK_LCM) += $(foreach LCM,$(LCM_LISTS),$(LCM)/)
+#yajun.wang remove
+#obj-$(CONFIG_MTK_LCM) += $(foreach LCM,$(LCM_LISTS),$(LCM)/)
+
+
+ifeq (y, $(filter y, $(CONFIG_MACH_MT6761)))
+    MTK_PLATFORM:= $(subst ",,mt6765)
+else
+    MTK_PLATFORM:= $(subst ",,$(CONFIG_MTK_PLATFORM))
+endif
 
 subdir-ccflags-$(CONFIG_MTK_LCM) += -I$(srctree)/drivers/misc/mediatek/lcm/inc
 subdir-ccflags-$(CONFIG_MTK_FB) += -I$(srctree)/drivers/misc/mediatek/video/$(MTK_PLATFORM)/dispsys \

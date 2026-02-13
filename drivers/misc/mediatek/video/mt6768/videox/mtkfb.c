@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #include <generated/autoconf.h>
 #include <linux/module.h>
@@ -967,7 +959,7 @@ unsigned int mtkfb_fm_auto_test(void)
 	}
 
 	if (idle_state_backup) {
-		primary_display_idlemgr_kick(__func__, 0);
+		primary_display_idlemgr_kick(__func__, 1);
 		disp_helper_set_option(DISP_OPT_IDLEMGR_ENTER_ULPS, 0);
 	}
 	fbVirAddr = (unsigned long)fbdev->fb_va_base;
@@ -1001,7 +993,7 @@ unsigned int mtkfb_fm_auto_test(void)
 
 	mtkfb_pan_display_impl(&mtkfb_fbi->var, mtkfb_fbi);
 	msleep(100);
-	primary_display_idlemgr_kick(__func__, 0);
+	primary_display_idlemgr_kick(__func__, 1);
 	result = primary_display_lcm_ATA();
 
 	if (idle_state_backup)
@@ -2653,8 +2645,10 @@ static int mtkfb_probe(struct platform_device *pdev)
 
 	if (!strcmp(mtkfb_find_lcm_driver(),
 		"nt35521_hd_dsi_vdo_truly_rt5081_drv")) {
+#ifdef CONFIG_MTK_CCCI_DRIVER
 		register_ccci_sys_call_back(MD_SYS1,
 			MD_DISPLAY_DYNAMIC_MIPI, mipi_clk_change);
+#endif
 	}
 
 	MSG_FUNC_LEAVE();

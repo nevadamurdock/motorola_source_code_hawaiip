@@ -1,14 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
 
 #include <linux/slab.h>
@@ -20,10 +12,22 @@
 #include "disp_drv_platform.h"
 #include "ddp_manager.h"
 #include "disp_lcm.h"
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
 
 #if defined(MTK_LCM_DEVICE_TREE_SUPPORT)
 #include <linux/of.h>
 #endif
+#define TINNO_GPIO_CHECK 1
+#if TINNO_GPIO_CHECK
+struct delayed_work tinno_gpio_check_work;
+static struct workqueue_struct *tinno_gpio_check_wq;
+static unsigned long irq_timer = 0;
+uint8_t gpio_check = false;
+uint8_t gpio_check_retry = 0;
+#define TINNO_GPIO_CHECK_PERIOD 40	/* ms */
+#define LCD_ENN_GPIO 248
+#endif /* #if TINNO_GPIO_CHECK */
 
 /* This macro and arrya is designed for multiple LCM support */
 /* for multiple LCM, we should assign I/F Port id in lcm driver, */
@@ -1028,6 +1032,45 @@ void load_lcm_resources_from_DT(struct LCM_DRIVER *lcm_drv)
 }
 #endif
 
+#if TINNO_GPIO_CHECK
+void tinno_gpio_check_enable(uint8_t enable)
+{
+	/* update interrupt timer */
+	irq_timer = jiffies;
+	/* clear gpio_check_retry counter, if gpio_check function is enabled */
+	gpio_check_retry = enable ? 0 : gpio_check_retry;
+	/* enable/disable gpio_check_check flag */
+	gpio_check = enable;
+}
+
+static void tinno_gpio_check_func(struct work_struct *work)
+{
+	unsigned int timer = jiffies_to_msecs(jiffies - irq_timer);
+
+	//pr_err("tinno gpio_check = %d (retry %d)\n", gpio_check_check, gpio_check_retry);	//DEBUG
+
+	if ((timer > TINNO_GPIO_CHECK_PERIOD) && gpio_check) {
+
+		//pr_err("tinno do gpio check, timer = %d, retry = %d\n", timer, gpio_check_retry);
+		/* do gpio check */
+		if(!gpio_get_value(LCD_ENN_GPIO)){
+			pr_err("tinno func:%s LCD_ENN_GPIO value:%d\n", __func__,gpio_get_value(LCD_ENN_GPIO));
+			gpio_direction_output(LCD_ENN_GPIO, 1);
+			gpio_set_value(LCD_ENN_GPIO,1);
+			pr_err("tinno func:%s LCD_ENN_GPIO value:%d\n", __func__,gpio_get_value(LCD_ENN_GPIO));
+		}
+
+		/* update interrupt timer */
+		irq_timer = jiffies;
+		/* update gpio_check counter */
+		gpio_check_retry++;
+	}
+
+	queue_delayed_work(tinno_gpio_check_wq, &tinno_gpio_check_work,
+			msecs_to_jiffies(TINNO_GPIO_CHECK_PERIOD));
+}
+#endif /* #if TINNO_GPIO_CHECK */
+
 struct disp_lcm_handle *disp_lcm_probe(char *plcm_name,
 	enum LCM_INTERFACE_ID lcm_id, int is_lcm_inited)
 {
@@ -1068,7 +1111,7 @@ struct disp_lcm_handle *disp_lcm_probe(char *plcm_name,
 		}
 
 		lcmindex = 0;
-		}
+	} else
 #endif
 	if (_lcm_count() == 0) {
 		DISPERR("no lcm driver defined in linux kernel driver\n");
@@ -1164,6 +1207,18 @@ struct disp_lcm_handle *disp_lcm_probe(char *plcm_name,
 	if (plcm->params->type == LCM_TYPE_DBI
 	    && plcm->params->lcm_if == LCM_INTERFACE_NOTDEFINED)
 		plcm->lcm_if_id = LCM_INTERFACE_DBI0;
+	#if TINNO_GPIO_CHECK
+	pr_err("tinno_gpio_check_wq create workqueue start\n");
+			INIT_DELAYED_WORK(&tinno_gpio_check_work, tinno_gpio_check_func);
+			tinno_gpio_check_wq = alloc_workqueue("tinno_gpio_check_wq", WQ_MEM_RECLAIM, 1);
+			if (!tinno_gpio_check_wq) {
+				pr_err("tinno_gpio_check_wq create workqueue failed\n");
+				goto err_create_tinno_gpio_check_wq_failed;
+			}
+			queue_delayed_work(tinno_gpio_check_wq, &tinno_gpio_check_work,
+					msecs_to_jiffies(TINNO_GPIO_CHECK_PERIOD));
+			tinno_gpio_check_enable(true);
+	#endif /* #if TINNO_GPIO_CHECK */
 
 	if ((lcm_id == LCM_INTERFACE_NOTDEFINED) || lcm_id == plcm->lcm_if_id) {
 		plcm->lcm_original_width = plcm->params->width;
@@ -1175,6 +1230,16 @@ struct disp_lcm_handle *disp_lcm_probe(char *plcm_name,
 	DISPERR(
 		"the specific LCM Interface [%d] didn't define any lcm driver\n",
 		lcm_id);
+
+#if TINNO_GPIO_CHECK
+if (tinno_gpio_check_wq) {
+	cancel_delayed_work_sync(&tinno_gpio_check_work);
+	destroy_workqueue(tinno_gpio_check_wq);
+	tinno_gpio_check_wq = NULL;
+	}
+err_create_tinno_gpio_check_wq_failed:
+#endif
+
 FAIL:
 
 	kfree(plcm);
@@ -1410,6 +1475,12 @@ int disp_lcm_suspend(struct disp_lcm_handle *plcm)
 	struct LCM_DRIVER *lcm_drv = NULL;
 
 	DISPFUNC();
+#if TINNO_GPIO_CHECK
+	pr_err("tinno cancel delayed work sync\n");
+	cancel_delayed_work_sync(&tinno_gpio_check_work);
+	tinno_gpio_check_enable(false);
+#endif /* #if TINNO_GPIO_CHECK */
+
 	if (_is_lcm_inited(plcm)) {
 		lcm_drv = plcm->drv;
 		if (lcm_drv->suspend) {
@@ -1434,6 +1505,12 @@ int disp_lcm_resume(struct disp_lcm_handle *plcm)
 	struct LCM_DRIVER *lcm_drv = NULL;
 
 	DISPFUNC();
+#if TINNO_GPIO_CHECK
+	pr_err("tinno start delayed work sync\n");
+	tinno_gpio_check_enable(true);
+	queue_delayed_work(tinno_gpio_check_wq, &tinno_gpio_check_work,
+			msecs_to_jiffies(TINNO_GPIO_CHECK_PERIOD));
+#endif /* #if TINNO_GPIO_CHECK */
 	if (_is_lcm_inited(plcm)) {
 		lcm_drv = plcm->drv;
 
@@ -1684,3 +1761,202 @@ int disp_lcm_validate_roi(struct disp_lcm_handle *plcm,
 	DISPERR("validate roi lcm_drv is null\n");
 	return -1;
 }
+
+/*for ARR*/
+int disp_lcm_is_arr_support(struct disp_lcm_handle *plcm)
+{
+	struct LCM_PARAMS *lcm_param = NULL;
+	unsigned int dfps_levels = 0;
+	struct dynamic_fps_info *p_fps_table = NULL;
+	unsigned int i = 0;
+
+	/*DISPFUNC();*/
+	if (_is_lcm_inited(plcm))
+		lcm_param = plcm->params;
+	else
+		return 0;
+
+	if (lcm_param->type != LCM_TYPE_DSI ||
+		lcm_param->dsi.mode == CMD_MODE) {
+		return 0;
+	}
+
+	dfps_levels = lcm_param->dsi.dynamic_fps_levels;
+	if (dfps_levels == 0 ||
+		dfps_levels > DYNAMIC_FPS_LEVELS) {
+		return 0;
+	}
+	p_fps_table = lcm_param->dsi.dynamic_fps_table;
+	if (p_fps_table == NULL)
+		return 0;
+	for (i = 0; i < dfps_levels; i++) {
+		if (p_fps_table[i].fps == 0 ||
+			p_fps_table[i].vfp == 0) {
+			return 0;
+		}
+	}
+	DISPDBG("%s,lcm support arr\n", __func__);
+	return 1;
+}
+
+
+#ifdef CONFIG_MTK_HIGH_FRAME_RATE
+
+/*-------------------DynFPS start-----------------------------*/
+int disp_lcm_is_dynfps_support(struct disp_lcm_handle *plcm)
+{
+	struct LCM_PARAMS *lcm_param = NULL;
+	unsigned int dfps_enable = 0;
+	unsigned int dfps_num = 0;
+
+	/*DISPFUNC();*/
+	if (_is_lcm_inited(plcm))
+		lcm_param = plcm->params;
+	else
+		return 0;
+
+	if (lcm_param->type != LCM_TYPE_DSI ||
+		lcm_param->dsi.mode == CMD_MODE) {
+		return 0;
+	}
+
+	dfps_enable = lcm_param->dsi.dfps_enable;
+	dfps_num = lcm_param->dsi.dfps_num;
+	if (dfps_enable == 0 ||
+		dfps_num < 2) {
+		return 0;
+	}
+	/*DynFPS:ToDo*/
+	DISPDBG("%s,lcm support arr\n", __func__);
+	return 1;
+}
+
+unsigned int disp_lcm_dynfps_get_def_fps(
+		struct disp_lcm_handle *plcm)
+{
+	struct LCM_PARAMS *lcm_param = NULL;
+
+	/*DISPFUNC();*/
+	if (_is_lcm_inited(plcm))
+		lcm_param = plcm->params;
+	else
+		return 0;
+
+	return lcm_param->dsi.dfps_default_fps;
+}
+unsigned int disp_lcm_dynfps_get_dfps_num(
+		struct disp_lcm_handle *plcm)
+{
+	struct LCM_PARAMS *lcm_param = NULL;
+
+	/*DISPFUNC();*/
+	if (_is_lcm_inited(plcm))
+		lcm_param = plcm->params;
+	else
+		return 0;
+
+	return lcm_param->dsi.dfps_num;
+}
+unsigned int disp_lcm_dynfps_get_def_timing_fps(
+	struct disp_lcm_handle *plcm)
+{
+	struct LCM_PARAMS *lcm_param = NULL;
+
+	/*DISPFUNC();*/
+	if (_is_lcm_inited(plcm))
+		lcm_param = plcm->params;
+	else
+		return 0;
+
+	return lcm_param->dsi.dfps_def_vact_tim_fps;
+}
+
+bool disp_lcm_need_send_cmd(
+	struct disp_lcm_handle *plcm,
+	unsigned int last_dynfps, unsigned int new_dynfps)
+{
+	struct LCM_DRIVER *lcm_drv = NULL;
+	struct LCM_PARAMS *lcm_param = NULL;
+	struct LCM_DSI_PARAMS *dsi_params = NULL;
+	int from_level = -1;
+	int to_level = -1;
+	struct dfps_info *dfps_params = NULL;
+	unsigned int j = 0;
+
+	DISPFUNC();
+
+	if (_is_lcm_inited(plcm)) {
+		lcm_drv = plcm->drv;
+		lcm_param = plcm->params;
+		if (lcm_param)
+			dsi_params = &(lcm_param->dsi);
+	} else {
+		DISPCHECK("%s, lcm not inited!\n", __func__);
+		return false;
+	}
+	if (!lcm_drv ||
+		!lcm_drv->dfps_send_lcm_cmd ||
+		!lcm_drv->dfps_need_send_cmd) {
+		DISPCHECK("%s, no lcm drv or no dfps func !!!\n", __func__);
+		return false;
+	}
+	if (!dsi_params ||
+		!dsi_params->dfps_enable) {
+		DISPCHECK("%s,not support dfps !!!\n", __func__);
+		return false;
+	}
+	dfps_params = dsi_params->dfps_params;
+	for (j = 0; j < dsi_params->dfps_num; j++) {
+		if ((dfps_params[j]).fps == last_dynfps)
+			from_level = (dfps_params[j]).level;
+		if ((dfps_params[j]).fps == new_dynfps)
+			to_level = (dfps_params[j]).level;
+	}
+	if (from_level < 0 ||
+		to_level < 0)
+		return false;
+	return	lcm_drv->dfps_need_send_cmd(from_level, to_level, lcm_param);
+}
+
+void disp_lcm_dynfps_send_cmd(
+	struct disp_lcm_handle *plcm, void *cmdq_handle,
+	unsigned int from_fps, unsigned int to_fps)
+{
+	struct LCM_DRIVER *lcm_drv = NULL;
+	struct LCM_PARAMS *lcm_param = NULL;
+	struct LCM_DSI_PARAMS *dsi_params = NULL;
+	unsigned int from_level = 0;
+	unsigned int to_level = 0;
+	struct dfps_info *dfps_params = NULL;
+	unsigned int j = 0;
+	/*DISPFUNC();*/
+	if (_is_lcm_inited(plcm)) {
+		lcm_drv = plcm->drv;
+		lcm_param = plcm->params;
+		if (lcm_param)
+			dsi_params = &(lcm_param->dsi);
+	}
+	if (!lcm_drv || !lcm_drv->dfps_send_lcm_cmd) {
+		DISPCHECK("%s, no lcm drv or no dfps func !!!\n", __func__);
+		goto done;
+	}
+	if (!dsi_params ||
+		!dsi_params->dfps_enable) {
+		DISPCHECK("%s,not support dfps !!!\n", __func__);
+		goto done;
+	}
+	dfps_params = dsi_params->dfps_params;
+	for (j = 0; j < dsi_params->dfps_num; j++) {
+		if ((dfps_params[j]).fps == from_fps)
+			from_level = (dfps_params[j]).level;
+		if ((dfps_params[j]).fps == to_fps)
+			to_level = (dfps_params[j]).level;
+	}
+	lcm_drv->dfps_send_lcm_cmd(cmdq_handle,
+		from_level, to_level, lcm_param);
+done:
+	DISPCHECK("%s,add done\n", __func__);
+}
+
+/*-------------------DynFPS end-----------------------------*/
+#endif

@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #define LOG_TAG "ddp_manager"
 
@@ -51,7 +43,7 @@ struct DDP_IRQ_EVENT_MAPPING {
 
 struct ddp_path_handle {
 	struct cmdqRecStruct *cmdqhandle;
-	int hwmutexid;
+	unsigned int hwmutexid;
 	/* no need power_state now*/
 	/* int power_state; */
 	enum DDP_MODE mode;
@@ -306,7 +298,7 @@ disp_path_handle dpmgr_create_path(enum DDP_SCENARIO_ENUM scenario,
 				   struct cmdqRecStruct *cmdq_handle)
 {
 	int i = 0;
-	int m;
+	unsigned int m;
 	struct ddp_path_handle *path_handle = NULL;
 	int *list = ddp_get_scenario_list(scenario);
 	int m_num = ddp_get_module_num(scenario);
@@ -444,7 +436,7 @@ int dpmgr_modify_path(disp_path_handle dp_handle,
 int dpmgr_destroy_path_handle(disp_path_handle dp_handle)
 {
 	int i = 0;
-	int m;
+	unsigned int m;
 	struct ddp_path_handle *phandle;
 	int *list;
 	int m_num;
@@ -1291,9 +1283,10 @@ static int is_module_in_path(enum DISP_MODULE_ENUM module,
 			     struct ddp_path_handle *phandle)
 {
 	struct DDP_MANAGER_CONTEXT *c = _get_context();
+	unsigned int idx = (unsigned int)module;
 
 	ASSERT(module < DISP_MODULE_UNKNOWN);
-	if (c->module_path_table[module] == phandle)
+	if (c->module_path_table[idx] == phandle)
 		return 1;
 
 	return 0;
@@ -1472,16 +1465,17 @@ int dpmgr_enable_event(disp_path_handle dp_handle, enum DISP_PATH_EVENT event)
 {
 	struct ddp_path_handle *phandle;
 	struct DPMGR_WQ_HANDLE *wq_handle;
+	unsigned int idx = (unsigned int)event;
 
 	ASSERT(dp_handle);
 	if (!dp_handle)
 		return 0;
 	phandle = (struct ddp_path_handle *)dp_handle;
-	wq_handle = &phandle->wq_list[event];
+	wq_handle = &phandle->wq_list[idx];
 
 	DDPDBG("enable event %s on scenario %s, irtbit 0x%x\n",
 	       path_event_name(event), ddp_get_scenario_name(phandle->scenario),
-	       phandle->irq_event_map[event].irq_bit);
+	       phandle->irq_event_map[idx].irq_bit);
 
 	if (!wq_handle->init) {
 		init_waitqueue_head(&(wq_handle->wq));
@@ -1729,16 +1723,17 @@ int dpmgr_signal_event(disp_path_handle dp_handle, enum DISP_PATH_EVENT event)
 {
 	struct ddp_path_handle *phandle;
 	struct DPMGR_WQ_HANDLE *wq_handle;
+	unsigned int idx = (unsigned int)event;
 
 	ASSERT(dp_handle);
 	if (!dp_handle)
 		return 0;
 	phandle = (struct ddp_path_handle *)dp_handle;
-	wq_handle = &phandle->wq_list[event];
+	wq_handle = &phandle->wq_list[idx];
 
-	if (phandle->wq_list[event].init) {
+	if (phandle->wq_list[idx].init) {
 		wq_handle->data = ktime_to_ns(ktime_get());
-		wake_up_interruptible(&(phandle->wq_list[event].wq));
+		wake_up_interruptible(&(phandle->wq_list[idx].wq));
 	}
 	return 0;
 }

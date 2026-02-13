@@ -1,15 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2017 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * Copyright (C) 2016 MediaTek Inc.
  */
+
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -673,12 +666,12 @@ static ssize_t usb_driving_capability_write(struct file *file,
 	if (copy_from_user(&buf, ubuf, min_t(size_t, sizeof(buf) - 1, count)))
 		return -EFAULT;
 
-	if (kstrtol(buf, 10, (long *)&val) != 0) {
-		pr_notice("MTK_ICUSB [DBG], <%s(), %d> kstrtol, err(%d)\n)\n",
-			__func__, __LINE__, kstrtol(buf, 10, (long *)&val));
+	if (kstrtou8(buf, 10, &val) != 0) {
+		pr_notice("MTK_ICUSB [DBG], <%s(), %d> kstrtou8, err(%d)\n)\n",
+			__func__, __LINE__, kstrtou8(buf, 10, &val));
 		return count;
 	}
-	pr_notice("MTK_ICUSB [DBG], <%s(), %d> kstrtol, val(%d)\n)\n",
+	pr_notice("MTK_ICUSB [DBG], <%s(), %d> kstrtou8, val(%d)\n)\n",
 					__func__, __LINE__, val);
 
 	if (val > VAL_7_WIDTH_3 * 2) {

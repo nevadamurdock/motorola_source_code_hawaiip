@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #define LOG_TAG "DSI"
 
@@ -879,7 +871,8 @@ int ddp_dsi_porch_setting(enum DISP_MODULE_ENUM module, void *handle,
 		if (type == DSI_VFP) {
 			DISPINFO("set dsi%d vfp to %d\n", i, value);
 			DSI_OUTREG32(handle, &DSI_REG[i]->DSI_VFP_NL, value);
-			if (bdg_is_bdg_connected() == 1)
+			if (pgc != NULL && pgc->vfp_chg_sync_bdg
+					&& bdg_is_bdg_connected() == 1)
 				ddp_dsi_set_bdg_porch_setting(module, handle, value);
 		}
 		if (type == DSI_VSA) {

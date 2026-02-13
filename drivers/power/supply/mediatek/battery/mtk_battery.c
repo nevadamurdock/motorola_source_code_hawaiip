@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- */
+ * Copyright (c) 2021 MediaTek Inc.
+*/
 
 /*****************************************************************************
  *
@@ -60,9 +52,9 @@
 #include <linux/math64.h> /*div_s64*/
 
 #include <mt-plat/aee.h>
-#include <mt-plat/charger_type.h>
-#include <mt-plat/mtk_charger.h>
-#include <mt-plat/mtk_battery.h>
+#include <mt-plat/v1/charger_type.h>
+#include <mt-plat/v1/mtk_charger.h>
+#include <mt-plat/v1/mtk_battery.h>
 #include <mt-plat/mtk_boot.h>
 
 #include <mtk_gauge_class.h>
@@ -130,6 +122,14 @@ static enum power_supply_property battery_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY_LEVEL,
 	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+};
+
+/* boot mode */
+struct tag_bootmode {
+	u32 size;
+	u32 tag;
+	u32 bootmode;
+	u32 boottype;
 };
 
 /* weak function */
@@ -271,7 +271,7 @@ bool is_battery_init_done(void)
 
 bool is_recovery_mode(void)
 {
-	int boot_mode = get_boot_mode();
+	int boot_mode = battery_get_boot_mode();
 
 	if (is_fg_disabled())
 		return false;
@@ -284,6 +284,33 @@ bool is_recovery_mode(void)
 	}
 
 	return false;
+}
+
+int battery_get_boot_mode(void)
+{
+	struct device *dev = NULL;
+	struct device_node *boot_node = NULL;
+	struct tag_bootmode *tag = NULL;
+	int boot_mode = 11;//UNKNOWN_BOOT
+
+	dev = gm.gdev->dev.parent;
+	if (dev != NULL) {
+		boot_node = of_parse_phandle(dev->of_node, "bootmode", 0);
+		if (!boot_node) {
+			bm_err("%s: failed to get boot mode phandle\n", __func__);
+		} else {
+			tag = (struct tag_bootmode *)of_get_property(boot_node,
+								"atag,boot", NULL);
+			if (!tag)
+				bm_err("%s: failed to get atag,boot\n", __func__);
+			else {
+				boot_mode = tag->bootmode;
+				gm.boot_mode = tag->bootmode;
+			}
+		}
+	}
+	bm_debug("%s: boot mode=%d\n", __func__, boot_mode);
+	return boot_mode;
 }
 
 bool is_fg_disabled(void)
@@ -448,6 +475,14 @@ static int battery_get_property(struct power_supply *psy,
 		val->intval = gm.bat_cycle;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
+		/* 1 = META_BOOT, 4 = FACTORY_BOOT 5=ADVMETA_BOOT */
+		/* 6= ATE_factory_boot */
+		if (gm.boot_mode == 1 || gm.boot_mode == 4
+			|| gm.boot_mode == 5 || gm.boot_mode == 6) {
+			val->intval = 75;
+			break;
+		}
+
 		if (gm.fixed_uisoc != 0xffff)
 			val->intval = gm.fixed_uisoc;
 		else
@@ -637,7 +672,7 @@ void battery_update(struct battery_data *bat_data)
 
 bool is_kernel_power_off_charging(void)
 {
-	int boot_mode = get_boot_mode();
+	int boot_mode = battery_get_boot_mode();
 
 	if (boot_mode == KERNEL_POWER_OFF_CHARGING_BOOT
 	    || boot_mode == LOW_POWER_OFF_CHARGING_BOOT) {
@@ -3792,18 +3827,27 @@ static ssize_t store_BAT_HEALTH(
 	char *s = buf_str, *pch;
 	/* char *ori = buf_str; */
 	int chr_size = 0;
-	int i = 0, count = 0, value[50];
+	int i = 0, j = 0, count = 0, value[50];
 
 
 	bm_err("%s, size =%d, str=%s\n", __func__, size, buf);
 
-	strncpy(buf_str, buf, size);
-	/* bm_err("%s, copy str=%s\n", __func__, buf_str); */
-
-	if (size > 350) {
+	if (size < 90 || size > 350) {
 		bm_err("%s error, size mismatch\n", __func__);
 		return -1;
+	} else {
+		for (i = 0; i < strlen(buf); i++) {
+			if (buf[i] == ',')
+				j++;
+		}
+		if (j != 46) {
+			bm_err("%s error, invalid input\n", __func__);
+			return -1;
+		}
 	}
+
+	strncpy(buf_str, buf, size);
+	/* bm_err("%s, copy str=%s\n", __func__, buf_str); */
 
 	if (buf != NULL && size != 0) {
 
@@ -4347,7 +4391,7 @@ static const struct file_operations adc_cali_fops = {
 
 
 /*************************************/
-static struct wakeup_source battery_lock;
+static struct wakeup_source *battery_lock;
 static int __init battery_probe(struct platform_device *dev)
 {
 	int ret_device_file = 0;
@@ -4366,8 +4410,8 @@ static int __init battery_probe(struct platform_device *dev)
 	char boot_voltage_tmp[10];
 	int boot_voltage_len = 0;
 
-	wakeup_source_init(&battery_lock, "battery wakelock");
-	__pm_stay_awake(&battery_lock);
+	battery_lock = wakeup_source_register(NULL, "battery wakelock");
+	__pm_stay_awake(battery_lock);
 
 /********* adc_cdev **********/
 	ret = alloc_chrdev_region(&adc_cali_devno, 0, 1, ADC_CALI_DEVNAME);
@@ -4512,7 +4556,7 @@ static int __init battery_probe(struct platform_device *dev)
 
 	battery_debug_init();
 
-	__pm_relax(&battery_lock);
+	__pm_relax(battery_lock);
 
 	if (IS_ENABLED(CONFIG_POWER_EXT) || gm.disable_mtkbattery ||
 		IS_ENABLED(CONFIG_MTK_DISABLE_GAUGE)) {

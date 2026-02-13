@@ -1,14 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2017 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
 
 #include "kd_imgsensor.h"
@@ -598,6 +590,12 @@ struct IMGSENSOR_SENSOR_LIST
 {T8EV5_SENSOR_ID, SENSOR_DRVNAME_T8EV5_YUV, T8EV5_YUV_SensorInit},
 #endif
 
+#if defined(OV13B10LN_MIPI_RAW)
+	{OV13B10LN_SENSOR_ID, SENSOR_DRVNAME_OV13B10LN_MIPI_RAW, OV13B10LN_MIPI_RAW_SensorInit},
+#endif
+#if defined(S5K4H7LN_MIPI_RAW)
+	{S5K4H7LN_SENSOR_ID, SENSOR_DRVNAME_S5K4H7LN_MIPI_RAW, S5K4H7LN_MIPI_RAW_SensorInit},
+#endif
 	/*  ADD sensor driver before this line */
 	{0, {0}, NULL}, /* end of list */
 };

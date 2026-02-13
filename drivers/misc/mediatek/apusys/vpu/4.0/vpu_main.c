@@ -1,16 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * Copyright (c) 2020 MediaTek Inc.
  */
-
 #include <linux/types.h>
 #include <linux/interrupt.h>
 #include <linux/device.h>
@@ -570,9 +561,11 @@ static int vpu_shared_get(struct platform_device *pdev,
 
 	kref_init(&vpu_drv->iova_ref);
 
-	if (!vpu_drv->mva_algo) {
+	if (!vpu_drv->mva_algo && vd->id == 0) {
 		if (vpu_iova_dts(pdev, "algo", &vpu_drv->iova_algo))
 			goto error;
+		if (!vpu_drv->iova_algo.size)
+			return 0;
 		iova = vpu_iova_alloc(pdev, &vpu_drv->iova_algo);
 		if (!iova)
 			goto error;

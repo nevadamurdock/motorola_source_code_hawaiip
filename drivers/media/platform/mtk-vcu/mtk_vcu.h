@@ -1,15 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2016 MediaTek Inc.
- * Author: Andrew-CT Chen <andrew-ct.chen@mediatek.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
 
 #ifndef MTK_VCU_H
@@ -299,5 +290,6 @@ extern void venc_encode_pmqos_gce_end(void *ctx_end,
 extern void vdec_check_release_lock(void *ctx_check);
 extern void mtk_vcodec_gce_timeout_dump(void *ctx);
 int vcu_set_log(const char *val);
+int vcu_get_log(char *val, unsigned int val_len);
 
 #endif /* _MTK_VCU_H */

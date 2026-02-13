@@ -1,20 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- */
-
-/*
- * Copyright(C)2014 MediaTek Inc.
- * Modification based on code covered by the below mentioned copyright
- * and/or permission notice(S).
+ * Copyright (c) 2019 MediaTek Inc.
  */
 
 #ifndef __HWMSENSOR_H__
@@ -82,8 +68,12 @@
 #define SENSOR_TYPE_RGBW                               70
 #define SENSOR_TYPE_GYRO_TEMPERATURE                   71
 #define SENSOR_TYPE_SAR                                72
+/*add new virtual sensors*/
+#define SENSOR_TYPE_FLIP_TWIST                         73
+#define SENSOR_TYPE_CHOP_CHOP                          74
+#define SENSOR_TYPE_SIGNIFICANT_MOVE                   75
 /* end sensor type */
-#define SENSOR_TYPE_MAX_NUM                            SENSOR_TYPE_SAR
+#define SENSOR_TYPE_MAX_NUM                            SENSOR_TYPE_SIGNIFICANT_MOVE
 #define SENSOR_TYPE_MAX_NUM_PLUS_ONE                   (SENSOR_TYPE_MAX_NUM + 1)
 
 /*---------------------------------------------------------------------------*/
@@ -155,8 +145,11 @@
 #define ID_RGBW                 (ID_BASE + SENSOR_TYPE_RGBW - 1)
 #define ID_GYRO_TEMPERATURE     (ID_BASE + SENSOR_TYPE_GYRO_TEMPERATURE - 1)
 #define ID_SAR                  (ID_BASE + SENSOR_TYPE_SAR - 1)
+#define ID_FLIP_TWIST           (ID_BASE + SENSOR_TYPE_FLIP_TWIST - 1)
+#define ID_CHOP_CHOP            (ID_BASE + SENSOR_TYPE_CHOP_CHOP - 1)
+#define ID_SIGNIFICANT_MOVE     (ID_BASE + SENSOR_TYPE_SIGNIFICANT_MOVE - 1)
 /* end sensor ID */
-#define ID_SENSOR_MAX_HANDLE    (ID_SAR)
+#define ID_SENSOR_MAX_HANDLE    (ID_SIGNIFICANT_MOVE)
 #define ID_SENSOR_MAX_HANDLE_PLUS_ONE    (ID_SENSOR_MAX_HANDLE + 1)
 
 #if (ID_SENSOR_MAX_HANDLE_PLUS_ONE != SENSOR_TYPE_MAX_NUM)

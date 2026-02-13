@@ -1,15 +1,20 @@
+// SPDX-License-Identifier: GPL-2.0
+
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
+
+/*
+ * GenieZone (hypervisor-based seucrity platform) enables hardware protected
+ * and isolated security execution environment, includes
+ * 1. GZ hypervisor
+ * 2. Hypervisor-TEE OS (built-in Trusty OS)
+ * 3. Drivers (ex: debug, communication and interrupt) for GZ and
+ *    hypervisor-TEE OS
+ * 4. GZ and hypervisor-TEE and GZ framework (supporting multiple TEE
+ *    ecosystem, ex: M-TEE, Trusty, GlobalPlatform, ...)
+ */
+
 
 #include "gz_shmem_ut.h"
 #include <linux/string.h>
@@ -298,8 +303,8 @@ TZ_RESULT shmem_test_discontinuous(void)
 		paAry[idx++] = pa2 + (uint64_t) (m) * (uint64_t) PAGE_SIZE;
 
 	/*for debug */
-	for (m = 0; m < idx; m++)
-		KREE_DEBUG("paAry[%d]=0x%llx\n", m, paAry[m]);
+	//for (m = 0; m < idx; m++)
+	//	KREE_DEBUG("paAry[%d]=0x%llx\n", m, paAry[m]);
 
 	shm_param.buffer = NULL;
 	shm_param.size = (num_PA1 + num_PA2) * (uint32_t) PAGE_SIZE;

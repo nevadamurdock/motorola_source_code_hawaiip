@@ -1,15 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
  */
+
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/gpio.h>
@@ -27,16 +20,36 @@
 #include "ccci_modem.h"
 #include "ccci_swtp.h"
 #include "ccci_fsm.h"
+#include <linux/input.h>
 
+
+/* must keep ARRAY_SIZE(swtp_of_match) = ARRAY_SIZE(irq_name) */
 const struct of_device_id swtp_of_match[] = {
 	{ .compatible = SWTP_COMPATIBLE_DEVICE_ID, },
 	{ .compatible = SWTP1_COMPATIBLE_DEVICE_ID,},
+	{ .compatible = SWTP2_COMPATIBLE_DEVICE_ID,},
+	{ .compatible = SWTP3_COMPATIBLE_DEVICE_ID,},
+	{ .compatible = SWTP4_COMPATIBLE_DEVICE_ID,},
 	{},
 };
+
+static const char irq_name[][16] = {
+	"swtp0-eint",
+	"swtp1-eint",
+	"swtp2-eint",
+	"swtp3-eint",
+	"swtp4-eint",
+	"",
+};
+
 #define SWTP_MAX_SUPPORT_MD 1
 struct swtp_t swtp_data[SWTP_MAX_SUPPORT_MD];
+
+struct input_dev *input_dev;
+
 static const char rf_name[] = "RF_cable";
-#define MAX_RETRY_CNT 3
+#define MAX_RETRY_CNT 30
+
 
 static int swtp_send_tx_power(struct swtp_t *swtp)
 {
@@ -55,10 +68,12 @@ static int swtp_send_tx_power(struct swtp_t *swtp)
 	power_mode = swtp->tx_power_mode;
 	spin_unlock_irqrestore(&swtp->spinlock, flags);
 
+
 	if (ret != 0)
 		CCCI_LEGACY_ERR_LOG(swtp->md_id, SYS,
 			"%s to MD%d,state=%d,ret=%d\n",
 			__func__, swtp->md_id + 1, power_mode, ret);
+
 
 	return ret;
 }
@@ -74,6 +89,7 @@ static int swtp_switch_state(int irq, struct swtp_t *swtp)
 	}
 
 	spin_lock_irqsave(&swtp->spinlock, flags);
+
 	for (i = 0; i < MAX_PIN_NUM; i++) {
 		if (swtp->irq[i] == irq)
 			break;
@@ -88,6 +104,7 @@ static int swtp_switch_state(int irq, struct swtp_t *swtp)
 	if (swtp->eint_type[i] == IRQ_TYPE_LEVEL_LOW) {
 		irq_set_irq_type(swtp->irq[i], IRQ_TYPE_LEVEL_HIGH);
 		swtp->eint_type[i] = IRQ_TYPE_LEVEL_HIGH;
+
 	} else {
 		irq_set_irq_type(swtp->irq[i], IRQ_TYPE_LEVEL_LOW);
 		swtp->eint_type[i] = IRQ_TYPE_LEVEL_LOW;
@@ -96,6 +113,7 @@ static int swtp_switch_state(int irq, struct swtp_t *swtp)
 	if (swtp->gpio_state[i] == SWTP_EINT_PIN_PLUG_IN)
 		swtp->gpio_state[i] = SWTP_EINT_PIN_PLUG_OUT;
 	else
+
 		swtp->gpio_state[i] = SWTP_EINT_PIN_PLUG_IN;
 
 	swtp->tx_power_mode = SWTP_NO_TX_POWER;
@@ -105,10 +123,12 @@ static int swtp_switch_state(int irq, struct swtp_t *swtp)
 			break;
 		}
 	}
+
 	inject_pin_status_event(swtp->curr_mode, rf_name);
 	spin_unlock_irqrestore(&swtp->spinlock, flags);
 
 	return swtp->tx_power_mode;
+
 }
 
 static void swtp_send_tx_power_state(struct swtp_t *swtp)
@@ -135,12 +155,32 @@ static void swtp_send_tx_power_state(struct swtp_t *swtp)
 
 }
 
+
+
+static int ant_det_irq(int status)
+{
+	int ret = 0;
+	CCCI_LEGACY_ERR_LOG(-1, SYS,"swtp ant_det_irq status=%d in\n",status);
+	//ret = gpio_get_value(80);
+	//CCCI_LEGACY_ERR_LOG(-1, SYS,"swtp ant_det_irq get gpio 80 level = %d\n", ret);
+	//Ramiel ++++++++++
+	input_report_key(input_dev, 1, 1);
+	input_report_key(input_dev, 1, 0);
+	input_sync(input_dev);
+	CCCI_LEGACY_ERR_LOG(-1, SYS,"swtp ant_det_irq input_report_key = %d\n", status+1);
+	//Ramiel ----------
+	return ret;
+}
+
+
 static irqreturn_t swtp_irq_handler(int irq, void *data)
 {
 	struct swtp_t *swtp = (struct swtp_t *)data;
 	int ret = 0;
 
 	ret = swtp_switch_state(irq, swtp);
+		ant_det_irq(ret);
+
 	if (ret < 0) {
 		CCCI_LEGACY_ERR_LOG(swtp->md_id, SYS,
 			"%s swtp_switch_state failed in irq, ret=%d\n",
@@ -210,10 +250,34 @@ static void swtp_init_delayed_work(struct work_struct *work)
 		goto SWTP_INIT_END;
 	}
 
+
+
+	
+	//Ramiel ++++++++++
+	CCCI_LEGACY_ERR_LOG(-1, SYS,"input_allocate_device \n");
+	input_dev = input_allocate_device();
+	input_dev->name = "ant_det";
+	input_set_capability(input_dev, EV_KEY, 1);
+	input_register_device(input_dev);
+	//Ramiel ----------
+
+
+	if (ARRAY_SIZE(swtp_of_match) != ARRAY_SIZE(irq_name) ||
+		ARRAY_SIZE(swtp_of_match) > MAX_PIN_NUM + 1 ||
+		ARRAY_SIZE(irq_name) > MAX_PIN_NUM + 1) {
+		ret = -3;
+		CCCI_LEGACY_ERR_LOG(-1, SYS,
+			"%s: invalid array count = %lu(of_match), %lu(irq_name)\n",
+			__func__, ARRAY_SIZE(swtp_of_match),
+			ARRAY_SIZE(irq_name));
+		goto SWTP_INIT_END;
+	}
+
 	for (i = 0; i < MAX_PIN_NUM; i++)
 		swtp_data[md_id].gpio_state[i] = SWTP_EINT_PIN_PLUG_OUT;
 
 	for (i = 0; i < MAX_PIN_NUM; i++) {
+
 		node = of_find_matching_node(NULL, &swtp_of_match[i]);
 		if (node) {
 			ret = of_property_read_u32_array(node, "debounce",
@@ -227,12 +291,14 @@ static void swtp_init_delayed_work(struct work_struct *work)
 
 			ret = of_property_read_u32_array(node, "interrupts",
 				ints1, ARRAY_SIZE(ints1));
+
 			if (ret) {
 				CCCI_LEGACY_ERR_LOG(md_id, SYS,
 					"%s:swtp%d get interrupts fail\n",
 					__func__, i);
 				break;
 			}
+
 #ifdef CONFIG_MTK_EIC /* for chips before mt6739 */
 			swtp_data[md_id].gpiopin[i] = ints[0];
 			swtp_data[md_id].setdebounce[i] = ints[1];
@@ -246,23 +312,25 @@ static void swtp_init_delayed_work(struct work_struct *work)
 			swtp_data[md_id].eint_type[i] = ints1[1];
 			swtp_data[md_id].irq[i] = irq_of_parse_and_map(node, 0);
 
+
 			ret = request_irq(swtp_data[md_id].irq[i],
 				swtp_irq_handler, IRQF_TRIGGER_NONE,
-				(i == 0 ? "swtp0-eint" : "swtp1-eint"),
-				&swtp_data[md_id]);
+				irq_name[i], &swtp_data[md_id]);
 			if (ret) {
 				CCCI_LEGACY_ERR_LOG(md_id, SYS,
 					"swtp%d-eint IRQ LINE NOT AVAILABLE\n",
 					i);
 				break;
 			}
+
 		} else {
 			CCCI_LEGACY_ERR_LOG(md_id, SYS,
 				"%s:can't find swtp%d compatible node\n",
 				__func__, i);
-			ret = -3;
+			ret = -4;
 		}
 	}
+
 	register_ccci_sys_call_back(md_id, MD_SW_MD1_TX_POWER_REQ,
 		swtp_md_tx_power_req_hdlr);
 

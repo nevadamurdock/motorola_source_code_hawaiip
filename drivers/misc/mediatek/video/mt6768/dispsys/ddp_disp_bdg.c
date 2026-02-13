@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 
 #include <linux/kernel.h>
@@ -54,7 +46,8 @@ struct DSI_TX_PHY_TIMCON2_REG timcon2;
 struct DSI_TX_PHY_TIMCON3_REG timcon3;
 unsigned int bg_tx_data_phy_cycle = 0, tx_data_rate = 0, ap_tx_data_rate = 0;
 //unsigned int ap_tx_data_phy_cycle = 0;
-unsigned int hsa_byte = 0, hbp_byte = 0, hfp_byte = 0, bllp_byte = 0, bg_tx_line_cycle = 0;
+int hsa_byte;
+unsigned int hbp_byte = 0, hfp_byte = 0, bllp_byte = 0, bg_tx_line_cycle = 0;
 //unsigned int ap_tx_hsa_wc = 0, ap_tx_hbp_wc = 0, ap_tx_hfp_wc = 0, ap_tx_bllp_wc = 0;
 unsigned int dsc_en;
 unsigned int mt6382_init;
@@ -95,7 +88,7 @@ struct lcm_setting_table {
 	unsigned char para_list[256];
 };
 
-#define MM_CLK			546 //fpga=26
+#define MM_CLK			270 //fpga=26
 #define NS_TO_CYCLE(n, c)	((n) / (c) + (((n) % (c)) ? 1 : 0))
 
 #define DSI_MODULE_to_ID(x)	(x == DISP_BDG_DSI0 ? 0 : 1)
@@ -536,12 +529,25 @@ void ana_macro_on(void *cmdq)
 	 * bit 16-17 is display mm clk 1(270m)/2(405m)/3(540m)
 	 * dsc_on:vact * hact * vrefresh * (vtotal / vact) * bubble_ratio
 	 */
-#ifdef _90HZ_
+	switch (MM_CLK) {
+	case 546:
+		DISPMSG("%s, 6382 mmclk 546M\n", __func__);
+		reg = (3 << 24) | (3 << 16) | (1 << 8) | (1 << 0); //540M
+		break;
+	case 405:
+		DISPMSG("%s, 6382 mmclk 405M\n", __func__);
+		reg = (3 << 24) | (2 << 16) | (1 << 8) | (1 << 0); //405M for 120Hz
+		break;
+	case 270:
+		DISPMSG("%s, 6382 mmclk 270M\n", __func__);
 	reg = (3 << 24) | (1 << 16) | (1 << 8) | (1 << 0); //270M for 90Hz
-#else
-	reg = (3 << 24) | (2 << 16) | (1 << 8) | (1 << 0); //405M for 120Hz
-#endif
-//	reg = (3 << 24) | (3 << 16) | (1 << 8) | (1 << 0); //540M
+		break;
+	default:
+		DISPMSG("%s, 6382 mmclk default 546M\n", __func__);
+		reg = (3 << 24) | (3 << 16) | (1 << 8) | (1 << 0); //540M
+		break;
+	}
+
 	DSI_OUTREG32(cmdq, TOPCKGEN->CLK_CFG_0_SET, reg);
 	//config update
 	reg = (1 << 4) | (1 << 3) | (1 << 1) | (1 << 0);
@@ -1565,8 +1571,27 @@ int bdg_tx_vdo_timing_set(enum DISP_BDG_ENUM module,
 					tx_params->vertical_sync_active);
 		DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_VBP_NL,
 					(tx_params->vertical_backporch));
+
+#ifdef CONFIG_MTK_HIGH_FRAME_RATE
+		if (!pgc->vfp_chg_sync_bdg) {
+			int j;
+
+			/* keep 6382's vfp in 90hz level as default */
+			for (j = 0; j < DFPS_LEVELS; j++) {
+				if (tx_params->dfps_params[j].fps == 9000) {
+					DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_VFP_NL,
+						(tx_params->dfps_params[j].vertical_frontporch));
+					break;
+				}
+			}
+		} else {
+			DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_VFP_NL,
+						(tx_params->vertical_frontporch));
+		}
+#else
 		DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_VFP_NL,
 					(tx_params->vertical_frontporch));
+#endif
 
 		DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_HSA_WC, hsa_byte);
 		DSI_OUTREG32(cmdq, TX_REG[i]->DSI_TX_HBP_WC, hbp_byte);
@@ -1881,6 +1906,8 @@ int bdg_dsi_dump_reg(enum DISP_BDG_ENUM module, unsigned int level)
 		unsigned long dsc_base_addr = (unsigned long)DSC_REG;
 		unsigned long dsi_base_addr = (unsigned long)TX_REG[i];
 		unsigned long mipi_base_addr = (unsigned long)MIPI_TX_REG;
+		unsigned long rx_base_addr = (unsigned long)DSI2_REG;
+		unsigned long rx_phy_base_addr = (unsigned long)MIPI_RX_PHY_BASE;
 
 		DISPMSG("========================== mt6382 RX REGS ==\n", i);
 		tmp = mtk_spi_read(0x0000d00c);
@@ -2155,11 +2182,30 @@ int bdg_dsi_dump_reg(enum DISP_BDG_ENUM module, unsigned int level)
 			if (tmp & (1 << 3))
 				DISPMSG("Trigger 3\n");
 		}
-
+		if (level > 2) {
+			DISPMSG("========================== mt6382 RX Full REGS ==\n");
+	//		for (k = 0; k < sizeof(struct BDG_TX_REGS); k += 16) {
+			for (k = 0; k < 0x210; k += 16) {
+				DISPMSG("0x%08x: 0x%08x 0x%08x 0x%08x 0x%08x\n", rx_base_addr + k,
+					mtk_spi_read(rx_base_addr + k),
+					mtk_spi_read(rx_base_addr + k + 0x4),
+					mtk_spi_read(rx_base_addr + k + 0x8),
+					mtk_spi_read(rx_base_addr + k + 0xc));
+			}
+			DISPMSG("========================== mt6382 RX PHY REGS ==\n");
+	//		for (k = 0; k < sizeof(struct BDG_TX_REGS); k += 16) {
+			for (k = 12288; k < 0x15440; k += 16) {
+				DISPMSG("0x%08x: 0x%08x 0x%08x 0x%08x 0x%08x\n", k / 4,
+					mtk_spi_read(rx_phy_base_addr + k),
+					mtk_spi_read(rx_phy_base_addr + k + 0x4),
+					mtk_spi_read(rx_phy_base_addr + k + 0x8),
+					mtk_spi_read(rx_phy_base_addr + k + 0xc));
+			}
+		}
 		DISPMSG("========================== mt6382 DSI%d REGS ==\n", i);
 //		for (k = 0; k < sizeof(struct BDG_TX_REGS); k += 16) {
-		for (k = 0; k < 0x210; k += 16) {
-			DISPMSG("0x%08x: 0x%08x 0x%08x 0x%08x 0x%08x\n", k,
+		for (k = 0; k < 0x4f0; k += 16) {
+			DISPMSG("0x%08x: 0x%08x 0x%08x 0x%08x 0x%08x\n", dsi_base_addr + k,
 				mtk_spi_read(dsi_base_addr + k),
 				mtk_spi_read(dsi_base_addr + k + 0x4),
 				mtk_spi_read(dsi_base_addr + k + 0x8),
@@ -3393,12 +3439,11 @@ int mipi_dsi_rx_mac_init(enum DISP_BDG_ENUM module,
 	DSI_OUTREG32(cmdq, DSI2_REG->DSI2_DEVICE_DDI_RDY_TO_CNT_OS, 0);
 	DSI_OUTREG32(cmdq, DSI2_REG->DSI2_DEVICE_DDI_RESP_TO_CNT_OS, 0);
 	DSI_OUTREG32(cmdq, DSI2_REG->DSI2_DEVICE_DDI_VALID_VC_CFG_OS, 0xf);
-	/* 0x1b for MMCLK 270M 0x37 for MMCLK 407M */
-#ifdef _90HZ_
-	DSI_OUTREG32(cmdq, DSI2_REG->DSI2_DEVICE_DDI_CLK_MGR_CFG_OS, 0x1b);
-#else
-	DSI_OUTREG32(cmdq, DSI2_REG->DSI2_DEVICE_DDI_CLK_MGR_CFG_OS, 0x37);
-#endif
+	/* 0x1b for MMCLK 270M 0x37 for MMCLK 405M */
+	if (MM_CLK == 270)
+		DSI_OUTREG32(cmdq, DSI2_REG->DSI2_DEVICE_DDI_CLK_MGR_CFG_OS, 0x1b);
+	else
+		DSI_OUTREG32(cmdq, DSI2_REG->DSI2_DEVICE_DDI_CLK_MGR_CFG_OS, 0x37);
 //	}
 
 	//video mode/ipi

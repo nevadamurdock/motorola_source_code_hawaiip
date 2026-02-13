@@ -15,7 +15,10 @@ config MTK_FINGERPRINT_SUPPORT
 
 config MTK_FINGERPRINT_SELECT
 	string "sensor type"
-	default "NA"
+	default "GF318M"
 
+source "drivers/input/fingerprint/ET528/Kconfig"
+
+source "drivers/input/fingerprint/INCF7312/Kconfig"
 
 endmenu

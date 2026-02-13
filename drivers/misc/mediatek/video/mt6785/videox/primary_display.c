@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #include <linux/delay.h>
 #include <linux/sched.h>
@@ -28,11 +20,12 @@
 #include <linux/device.h>
 #include <linux/pm_wakeup.h>
 #include <asm/cacheflush.h>
-#ifdef MTK_FB_ION_SUPPORT
+#if defined(CONFIG_MTK_ION)
 #include "mtk_ion.h"
 #include "ion_drv.h"
 #endif
-#ifdef CONFIG_MTK_M4U
+
+#if defined(CONFIG_MTK_M4U)
 #include "m4u.h"
 #include "m4u_priv.h"
 #endif
@@ -50,10 +43,12 @@
 #include "ddp_reg.h"
 #include "disp_session.h"
 #include "primary_display.h"
+#if defined(CONFIG_MTK_CMDQ)
 #include "cmdq_def.h"
 #include "cmdq_record.h"
 #include "cmdq_reg.h"
 #include "cmdq_core.h"
+#endif
 #include "ddp_rdma.h"
 #include "ddp_manager.h"
 #include "mtkfb_fence.h"
@@ -229,7 +224,7 @@ static int get_sw_round_corner_param(unsigned int *tp_mva, unsigned int *bt_mva,
 
 /* hold the wakelock to make kernel awake when primary display is on */
 /* Must manipulate wake lock through lock_primary_wake_lock() */
-struct wakeup_source pri_wk_lock;
+struct wakeup_source *pri_wk_lock;
 /* Notice: should hold path lock before call this function */
 
 static atomic_t primary_display_fps_chg_trigger = ATOMIC_INIT(0);
@@ -247,13 +242,13 @@ void lock_primary_wake_lock(bool lock)
 			DISPMSG("wake lock already held...\n");
 		else {
 			DISPMSG("hold the wakelock...\n");
-			__pm_stay_awake(&pri_wk_lock);
+			__pm_stay_awake(pri_wk_lock);
 			is_locked = 1;
 		}
 	} else {
 		if (is_locked) {
 			DISPMSG("release wakelock...\n");
-			__pm_relax(&pri_wk_lock);
+			__pm_relax(pri_wk_lock);
 			is_locked = 0;
 		} else
 			DISPMSG("wake lock already free...\n");
@@ -651,7 +646,7 @@ int dynamic_debug_msg_print(unsigned int mva, int w, int h, int pitch, int Bpp)
 	if (!disp_helper_get_option(DISP_OPT_SHOW_VISUAL_DEBUG_INFO))
 		return 0;
 
-	ret = m4u_query_mva_info(mva, layer_size, &real_mva, &real_size);
+	ret = m4u_query_mva_info(0, mva, layer_size, &real_mva, &real_size);
 	if (ret < 0) {
 		pr_debug("m4u_query_mva_info error\n");
 		return -1;
@@ -1301,7 +1296,8 @@ int primary_display_get_debug_state(char *stringbuf, int buf_len)
 	active_cfg = primary_display_get_current_cfg_id();
 #endif
 	/* print HRT table */
-	copy_hrt_bound_table(0, hrt_table, active_cfg);
+	//copy_hrt_bound_table(0, hrt_table, active_cfg);
+	copy_hrt_bound_table(0, hrt_table);
 	len += scnprintf(stringbuf + len, buf_len - len, "|HRT table=[");
 	for (i = 0; i < HRT_LEVEL_NUM-1; i++)
 		len += scnprintf(stringbuf + len, buf_len - len, "%d, ",
@@ -4206,6 +4202,10 @@ int primary_display_init(char *lcm_name, unsigned int lcm_fps,
 
 	dprec_init();
 	dpmgr_init();
+#ifdef MTK_FB_MMDVFS_SUPPORT
+	disp_pm_qos_init();
+	dvfs_last_ovl_req = 0;
+#endif
 #ifdef CONFIG_MTK_MT6382_BDG
 	if (is_lcm_inited) {
 		disp_pm_qos_update_mmclk(559);
@@ -4214,10 +4214,6 @@ int primary_display_init(char *lcm_name, unsigned int lcm_fps,
 		set_deskew_status(1);
 	} else
 		set_mt6382_init(0);
-#endif
-#ifdef MTK_FB_MMDVFS_SUPPORT
-	disp_pm_qos_init();
-	dvfs_last_ovl_req = 0;
 #endif
 
 	init_cmdq_slots(&(pgc->ovl_config_time), 3, 0);
@@ -4673,7 +4669,7 @@ lcm_corner_out:
 
 done:
 	DISPDBG("init and hold wakelock...\n");
-	wakeup_source_init(&pri_wk_lock, "pri_disp_wakelock");
+	pri_wk_lock = wakeup_source_register(NULL, "pri_disp_wakelock");
 	lock_primary_wake_lock(1);
 
 	if (disp_helper_get_stage() != DISP_HELPER_STAGE_NORMAL)
@@ -5331,8 +5327,8 @@ done:
 	_primary_path_switch_dst_unlock();
 
 #ifdef CONFIG_MTK_AEE_FEATURE
-	aee_kernel_wdt_kick_Powkey_api("mtkfb_early_suspend",
-				       WDT_SETBY_Display);
+	//aee_kernel_wdt_kick_Powkey_api("mtkfb_early_suspend",
+	//			       WDT_SETBY_Display);
 #endif
 	primary_trigger_cnt = 0;
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_suspend,
@@ -5881,7 +5877,7 @@ done:
 	DISPMSG("skip_update:%d\n", skip_update);
 
 #ifdef CONFIG_MTK_AEE_FEATURE
-	aee_kernel_wdt_kick_Powkey_api("mtkfb_late_resume", WDT_SETBY_Display);
+	//aee_kernel_wdt_kick_Powkey_api("mtkfb_late_resume", WDT_SETBY_Display);
 #endif
 	mmprofile_log_ex(ddp_mmp_get_events()->primary_resume,
 			 MMPROFILE_FLAG_END, 0, 0);
@@ -6265,11 +6261,11 @@ static int primary_display_trigger_nolock(int blocking, void *callback,
 
 done:
 #ifdef CONFIG_MTK_AEE_FEATURE
-	if ((primary_trigger_cnt > 1) && aee_kernel_Powerkey_is_press()) {
+	/*if ((primary_trigger_cnt > 1) && aee_kernel_Powerkey_is_press()) {
 		aee_kernel_wdt_kick_Powkey_api("primary_display_trigger",
 					       WDT_SETBY_Display);
 		primary_trigger_cnt = 0;
-	}
+	}*/
 #endif
 	if (pgc->session_id > 0)
 		update_frm_seq_info(0, 0, 0, FRM_TRIGGER);

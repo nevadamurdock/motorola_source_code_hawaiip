@@ -27,7 +27,9 @@ obj-$(CONFIG_INPUT_TOUCHSCREEN)	+= touchscreen/
 obj-$(CONFIG_INPUT_MISC)	+= misc/
 
 obj-$(CONFIG_INPUT_APMPOWER)	+= apm-power.o
-obj-$(CONFIG_INPUT_KEYRESET)	+= keyreset.o
-obj-$(CONFIG_INPUT_KEYCOMBO)	+= keycombo.o
 
 obj-$(CONFIG_RMI4_CORE)		+= rmi4/
+
+# bing.ma add for aw sar sensor
+obj-$(CONFIG_AW9610X_SAR) += aw9610x/
+obj-$(CONFIG_MTK_FINGERPRINT)	+= fingerprint/

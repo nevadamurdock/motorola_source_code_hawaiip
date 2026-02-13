@@ -1,14 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
 
 #define LOG_TAG "ddp_drv"
@@ -65,6 +57,8 @@
 #include "ddp_info.h"
 #include "ddp_m4u.h"
 #include "display_recorder.h"
+#include "disp_dts_gpio.h"   //yajun.wang
+#include <linux/pinctrl/consumer.h> //yajun.wang
 
 /* #define DISP_NO_DPI */
 #ifndef DISP_NO_DPI
@@ -72,7 +66,9 @@
 #endif
 #include "disp_helper.h"
 #include <linux/of_platform.h>
+#ifdef CONFIG_MTK_SMI_EXT
 #include "smi_public.h"
+#endif
 
 #define DISP_DEVNAME "DISPSYS"
 
@@ -97,12 +93,10 @@ static int _disp_init_cmdq_slots(cmdqBackupSlotHandle *pSlot,
 	int count, int init_val)
 {
 	int i;
-
 	cmdqBackupAllocateSlot(pSlot, count);
 
 	for (i = 0; i < count; i++)
 		cmdqBackupWriteSlot(*pSlot, i, init_val);
-
 	return 0;
 }
 
@@ -223,7 +217,7 @@ static int disp_open(struct inode *inode, struct file *file)
 {
 	struct disp_node_struct *pNode = NULL;
 
-	DDPDBG("enter %s process:%s\n", __func__, current->comm);
+	DDPDBG("enter disp_open() process:%s\n", current->comm);
 
 	/* Allocate and initialize private data */
 	file->private_data = kmalloc(sizeof(struct disp_node_struct),
@@ -253,7 +247,7 @@ static int disp_release(struct inode *inode, struct file *file)
 	struct disp_node_struct *pNode = NULL;
 
 	/* unsigned int index = 0; */
-	DDPDBG("enter %s process:%s\n", __func__, current->comm);
+	DDPDBG("enter disp_release() process:%s\n", current->comm);
 
 	pNode = (struct disp_node_struct *)file->private_data;
 
@@ -283,7 +277,7 @@ struct device *disp_get_device(void)
 	return &(mydev.dev);
 }
 
-#if (defined(CONFIG_MTK_TEE_GP_SUPPORT) || \
+#if (defined(CONFIG_TEE) || \
 	defined(CONFIG_TRUSTONIC_TEE_SUPPORT)) && \
 	defined(CONFIG_MTK_SEC_VIDEO_PATH_SUPPORT)
 static struct miscdevice disp_misc_dev;
@@ -406,9 +400,8 @@ static int disp_probe_1(void)
 	unsigned long va;
 	unsigned int irq;
 
-	pr_info("disp driver(1) %s begin\n", __func__);
-
-#if (defined(CONFIG_MTK_TEE_GP_SUPPORT) || \
+	pr_info("disp driver(1) disp_probe_1 begin\n");
+#if (defined(CONFIG_TEE) || \
 	defined(CONFIG_TRUSTONIC_TEE_SUPPORT)) && \
 	defined(CONFIG_MTK_SEC_VIDEO_PATH_SUPPORT)
 	disp_misc_dev.minor = MISC_DYNAMIC_MINOR;
@@ -421,7 +414,6 @@ static int disp_probe_1(void)
 		return (unsigned long)(ERR_PTR(ret));
 	}
 #endif
-
 	/* do disp_init_irq before register irq */
 	disp_init_irq();
 
@@ -430,7 +422,6 @@ static int disp_probe_1(void)
 		int status;
 		struct device_node *node = NULL;
 		struct resource res;
-
 		if (!is_ddp_module_has_reg_info(i))
 			continue;
 
@@ -473,6 +464,7 @@ static int disp_probe_1(void)
 		       i, ddp_get_module_name(i), (void *)ddp_get_module_va(i),
 		       ddp_get_module_irq(i), ddp_get_module_pa(i));
 	}
+
 	/* initialize display slot */
 	_disp_init_cmdq_slots(&(dispsys_slot), DISP_SLOT_NUM, 0);
 
@@ -488,7 +480,7 @@ static int disp_probe_1(void)
 			ddp_module_irq_disable(i);
 			continue;
 		}
-
+#if 0
 		if (ddp_get_module_checkirq(i) !=
 			virq_to_hwirq(ddp_get_module_irq(i))) {
 			DDPERR("DT, i=%d, %s, virq=%d, v2h_irq=%d, cirq=%d\n",
@@ -500,7 +492,7 @@ static int disp_probe_1(void)
 			ddp_module_irq_disable(i);
 			continue;
 		}
-
+#endif
 		/* IRQF_TRIGGER_NONE dose not take effect here,
 		 * real trigger mode set in dts file
 		 */
@@ -508,7 +500,6 @@ static int disp_probe_1(void)
 			(irq_handler_t)disp_irq_handler,
 			IRQF_TRIGGER_NONE,
 			ddp_get_module_name(i), NULL);
-
 		if (ret) {
 			DDPERR("DT, i=%d, module=%s, request_irq(%d) fail\n",
 				i, ddp_get_module_name(i),
@@ -531,10 +522,11 @@ static int disp_probe_1(void)
 	       DISP_REG_GET(DISP_REG_CONFIG_MMSYS_CG_CON0),
 	       DISP_REG_GET(DISP_REG_CONFIG_MMSYS_CG_CON1));
 #endif
+
 	ddp_path_init();
 	disp_m4u_init();
 
-	pr_info("disp driver(1) %s end\n", __func__);
+	pr_info("disp driver(1) disp_probe_1 end\n");
 	/* NOT_REFERENCED(class_dev); */
 	return ret;
 }
@@ -542,19 +534,16 @@ static int disp_probe_1(void)
 static int disp_probe(struct platform_device *pdev)
 {
 	static unsigned int disp_probe_cnt;
-
-	if (disp_helper_get_stage() == DISP_HELPER_STAGE_NORMAL) {
-		pr_info("%s: %d\n", __func__, smi_mm_first_get());
-		if (!smi_mm_first_get()) {
-			pr_notice("SMI not start probe\n");
-			return -EPROBE_DEFER;
-		}
+#ifdef CONFIG_MTK_SMI_EXT
+	pr_notice("%s: %d\n", __func__, smi_mm_first_get());
+	if (!smi_mm_first_get()) {
+		pr_notice("SMI not start probe\n");
+		return -EPROBE_DEFER;
 	}
-
+#endif
 	if (disp_probe_cnt != 0)
 		return 0;
-
-	pr_info("disp driver(1) %s begin\n", __func__);
+	pr_info("disp driver(1) disp_probe begin\n");
 
 	/* save pdev for disp_probe_1 */
 	memcpy(&mydev, pdev, sizeof(mydev));
@@ -566,16 +555,255 @@ static int disp_probe(struct platform_device *pdev)
 
 	disp_probe_cnt++;
 
-	pr_info("disp driver(1) %s end\n", __func__);
+	pr_info("disp driver(1) disp_probe end\n");
 
 	disp_probe_1();
 
 	return 0;
 }
 
+//yajun.wang
+#if defined(CONFIG_LCM_BIAS_SUPPORT)
+struct pinctrl *disptepinctrl = NULL;
+struct pinctrl_state *dispte_en_h = NULL;
+struct pinctrl_state *dispte_en_l = NULL;
+
+struct pinctrl_state  *lcm_enn_outputl = NULL, *lcm_enn_outputh = NULL; 
+struct pinctrl_state  *lcm_enp_outputl = NULL, *lcm_enp_outputh = NULL; 
+
+static long dts_gpio_state1 = 0; 
+static unsigned int lcm_id_gpio;
+
+static const struct of_device_id DispPWR_use_gpio_of_match[] = {
+	{.compatible = "tinno,lcm_pins_bl_en"},
+	{},
+};
+
+static int DispPWR_use_gpio_probe(struct platform_device *pdev)
+{
+	int ret = 0;
+	struct device_node *np;
+	np = pdev->dev.of_node;
+
+	printk("dispPWR_use_gpio_probe\n");
+
+	disptepinctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR(disptepinctrl)) {
+	        //printk("IS_ERR(disptepinctrl) \n");
+	        return -1;	
+	}
+	printk("%s,line = %d\n", __func__,__LINE__);
+	
+	lcm_enn_outputh = pinctrl_lookup_state(disptepinctrl, "lcm_enn_outputh");
+	if (IS_ERR(lcm_enn_outputh))
+	{
+		ret = PTR_ERR(lcm_enn_outputh);
+		dev_err(&pdev->dev, "fwq Cannot find lcm pinctrl state_enn_outputh!\n");
+		return ret;
+	}
+	lcm_enp_outputh = pinctrl_lookup_state(disptepinctrl, "lcm_enp_outputh");
+	if (IS_ERR(lcm_enp_outputh))
+	{
+		ret = PTR_ERR(lcm_enp_outputh);
+		dev_err(&pdev->dev, "fwq Cannot find lcm pinctrl state_enp_outputh!\n");
+		return ret;
+	}
+	lcm_enn_outputl = pinctrl_lookup_state(disptepinctrl, "lcm_enn_outputl");
+	if (IS_ERR(lcm_enn_outputl))
+	{
+		ret = PTR_ERR(lcm_enn_outputl);
+		dev_err(&pdev->dev, "fwq Cannot find lcm pinctrl state_enn_outputl!\n");
+		return ret;
+	}
+	lcm_enp_outputl = pinctrl_lookup_state(disptepinctrl, "lcm_enp_outputl");
+	if (IS_ERR(lcm_enp_outputl))
+	{
+		ret = PTR_ERR(lcm_enp_outputl);
+		dev_err(&pdev->dev, "fwq Cannot find lcm pinctrl state_enp_outputl!\n");
+		return ret;
+	}
+
+	ret = of_property_read_u32_index(np, "lcm-id-gpios", 1, &lcm_id_gpio);
+	if (ret)
+		dev_err(&pdev->dev," get lcm_id_gpio fail, ret = %d\n", ret);
+
+	dts_gpio_state1 = disp_dts_gpio_init_repo(pdev);
+	if (dts_gpio_state1 != 0)
+		dev_err(&pdev->dev, "retrieve GPIO DTS failed.");
+	printk("%s,line = %d\n", __func__,__LINE__);
+
+    return 0;
+}
+static int DispPWR_use_gpio_remove(struct platform_device *dev)	
+{
+	return 0;
+}
+
+static struct platform_driver DispPWR_use_gpio_driver = {
+	.probe	= DispPWR_use_gpio_probe,
+	.remove  = DispPWR_use_gpio_remove,
+	.driver    = {
+	.name       = "disppwr_gpio",
+	.of_match_table = DispPWR_use_gpio_of_match,	
+	},
+};
+
+
+
+void lcm_enn(int onoff)
+{
+	if(disptepinctrl != NULL){
+	    printk("lcm_power_ldo onoff  = %d,%p,%p,\n", onoff,lcm_enn_outputh,lcm_enn_outputl);
+	    if (onoff)
+	    {
+	    	pinctrl_select_state(disptepinctrl, lcm_enn_outputh);
+	    }
+	    else
+	    {
+		pinctrl_select_state(disptepinctrl, lcm_enn_outputl);
+	    }
+	}else{
+		printk("lcm power disptepinctrl fail \n");
+	}
+}
+
+void lcm_enp(int onoff)
+{
+	if(disptepinctrl != NULL){
+	    printk("lcm_power_ldo onoff  = %d,%p,%p\n", onoff,lcm_enp_outputl,lcm_enp_outputh);
+	    if (onoff)
+	    {
+		pinctrl_select_state(disptepinctrl, lcm_enp_outputh);
+	    }
+	    else
+	    {
+	    	pinctrl_select_state(disptepinctrl, lcm_enp_outputl);
+	    }
+	}else{
+		printk("lcm power disptepinctrl fail \n");
+	}
+}
+/*
+int get_lcm_id_status(void)
+{
+	int ret = -1;
+	ret = __gpio_get_value(lcm_id_gpio);
+	return ret;
+}
+*/
+#endif
+
+#if defined(CONFIG_LCM_BIAS_SUPPORT)
+struct pinctrl *disptepinhbmctrl = NULL;
+struct pinctrl_state *dispte_bl_h = NULL;
+struct pinctrl_state *dispte_bl_l = NULL;
+
+struct pinctrl_state  *backlight_hbm_outputl = NULL, *backlight_hbm_outputh = NULL; 
+
+
+static long dts_gpio_state2 = 0; 
+static unsigned int lcm_bl_gpio;
+
+static const struct of_device_id DispPWR_use_gpio_hbm_of_match[] = {
+	{.compatible = "tinno,lcm_pins_backlight_hbm"},
+	{},
+};
+
+static int DispPWR_use_gpio_hbm_probe(struct platform_device *pdev)
+{
+	int ret = 0;
+	struct device_node *np;
+	np = pdev->dev.of_node;
+	//printk("liye:1 DispPWR_use_gpio_hbm_probe\n");
+	printk("DispPWR_use_gpio_hbm_probe\n");
+
+	disptepinhbmctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR(disptepinhbmctrl)) {
+	        //printk("IS_ERR(disptepinhbmctrl) \n");
+	        return -1;	
+	}
+	printk("%s,line = %d\n", __func__,__LINE__);
+	//printk("liye:2 DispPWR_use_gpio_hbm_probe\n");
+	backlight_hbm_outputh = pinctrl_lookup_state(disptepinhbmctrl, "backlight_hbm_outputh");
+	if (IS_ERR(backlight_hbm_outputh))
+	{
+		ret = PTR_ERR(backlight_hbm_outputh);
+		dev_err(&pdev->dev, "fwq Cannot find lcm pinctrl state_backlight_hbm_outputh!\n");
+		//printk("liye:3 DispPWR_use_gpio_hbm_probe\n");
+		return ret;
+	}
+	backlight_hbm_outputl = pinctrl_lookup_state(disptepinhbmctrl, "backlight_hbm_outputl");
+	//printk("liye:4 DispPWR_use_gpio_hbm_probe\n");
+	if (IS_ERR(backlight_hbm_outputl))
+	{
+		ret = PTR_ERR(backlight_hbm_outputl);
+		dev_err(&pdev->dev, "fwq Cannot find lcm pinctrl state_backlight_hbm_outputl!\n");
+		//printk("liye:5 DispPWR_use_gpio_hbm_probe\n");
+		return ret;
+	}
+
+	ret = of_property_read_u32_index(np, "lcm-id-gpios", 1, &lcm_bl_gpio);
+	//printk("liye:6 DispPWR_use_gpio_hbm_probe\n");
+	if (ret)
+		dev_err(&pdev->dev," get lcm_bl_gpio fail, ret = %d\n", ret);
+    //printk("liye:7 DispPWR_use_gpio_hbm_probe\n");
+	dts_gpio_state2 = disp_dts_gpio_init_repo(pdev);
+	if (dts_gpio_state2 != 0)
+		dev_err(&pdev->dev, "retrieve GPIO DTS failed.");
+	printk("%s,line = %d\n", __func__,__LINE__);
+    //printk("liye:8 DispPWR_use_gpio_hbm_probe\n");
+    return 0;
+}
+static int DispPWR_use_gpio_hbm_remove(struct platform_device *dev)	
+{
+	return 0;
+}
+
+static struct platform_driver DispPWR_use_gpio_hbm_driver = {
+	.probe	= DispPWR_use_gpio_hbm_probe,
+	.remove  = DispPWR_use_gpio_hbm_remove,
+	.driver    = {
+	.name       = "disppwr_gpio_hbm",
+	.of_match_table = DispPWR_use_gpio_hbm_of_match,	
+	},
+};
+
+int hbm;
+void lcm_hbm(int onoff)
+{
+        //printk("liye:1 lcm_hbm_ldo onoff  = %d\n", onoff);
+	if(disptepinhbmctrl != NULL){
+	    //printk("liye:2 lcm_hbm_ldo onoff  = %d,,\n", onoff);
+	    if (onoff)
+	    {
+	    	pinctrl_select_state(disptepinhbmctrl, backlight_hbm_outputh);
+	    }
+	    else
+	    {
+		pinctrl_select_state(disptepinhbmctrl, backlight_hbm_outputl);
+	    }
+	}else{
+		printk("lcm hbm disptepinhbmctrl fail \n");
+	}
+	hbm=onoff;
+}
+
+
+
+/*
+int get_lcm_id_status(void)
+{
+	int ret = -1;
+	ret = __gpio_get_value(lcm_bl_gpio);
+	return ret;
+}
+*/
+#endif
+
+
 static int disp_remove(struct platform_device *pdev)
 {
-#if (defined(CONFIG_MTK_TEE_GP_SUPPORT) || \
+#if (defined(CONFIG_TEE) || \
 	defined(CONFIG_TRUSTONIC_TEE_SUPPORT)) && \
 	defined(CONFIG_MTK_SEC_VIDEO_PATH_SUPPORT)
 	misc_deregister(&disp_misc_dev);
@@ -630,6 +858,18 @@ static int __init disp_init(void)
 		ret = -ENODEV;
 		return ret;
 	}
+
+       //yajun.wang
+	#if defined(CONFIG_LCM_BIAS_SUPPORT)
+	//printk("%s,line = %d\n", __func__,__LINE__);
+	 if (platform_driver_register(&DispPWR_use_gpio_driver)) {
+	 	printk("%s,line = %d\n", __func__,__LINE__);
+
+		ret = -ENODEV;
+		return ret;
+	}
+	#endif
+	
 	DDPMSG("disp driver init done\n");
 	return 0;
 }
@@ -642,17 +882,64 @@ static void __exit disp_exit(void)
 	cdev_del(disp_cdev);
 	unregister_chrdev_region(disp_devno, 1);
 
+	//yajun.wang
+	#if defined(CONFIG_LCM_BIAS_SUPPORT)
+	platform_driver_unregister(&DispPWR_use_gpio_driver);
+       #endif
+	
 	platform_driver_unregister(&dispsys_of_driver);
 
 	device_destroy(disp_class, disp_devno);
 	class_destroy(disp_class);
 }
 
+static int __init hbm_init(void)
+{
+	int ret = 0;
+
+	init_log_buffer();
+	DDPMSG("Register the disp driver\n");
+
+
+
+
+	//printk("%s,line = %d\n", __func__,__LINE__);
+	 if (platform_driver_register(&DispPWR_use_gpio_hbm_driver)) {
+	 	printk("%s,line = %d\n", __func__,__LINE__);
+
+		ret = -ENODEV;
+		return ret;
+	}
+
+	
+	DDPMSG("disp driver init done\n");
+	return 0;
+}
+
+static void __exit hbm_exit(void)
+{
+	ASSERT(0);
+	/* disp-clk force on disable ??? */
+
+	cdev_del(disp_cdev);
+	unregister_chrdev_region(disp_devno, 1);
+
+
+
+	platform_driver_unregister(&DispPWR_use_gpio_hbm_driver);
+
+	
+
+	device_destroy(disp_class, disp_devno);
+	class_destroy(disp_class);
+}
+
+
 static int __init disp_late(void)
 {
 	int ret = 0;
 
-	DDPMSG("disp driver(1) %s begin\n", __func__);
+	DDPMSG("disp driver(1) disp_late begin\n");
 	/* for rt5081 */
 	ret = display_bias_regulator_init();
 	if (ret < 0)
@@ -660,9 +947,12 @@ static int __init disp_late(void)
 
 	display_bias_enable();
 
-	DDPMSG("disp driver(1) %s end\n", __func__);
+	DDPMSG("disp driver(1) disp_late end\n");
 	return 0;
 }
+
+module_init(hbm_init);
+module_exit(hbm_exit);
 
 #ifndef MTK_FB_DO_NOTHING
 module_init(disp_init);

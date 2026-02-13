@@ -770,6 +770,9 @@ struct cmdqRecStruct {
 	void *sec_client_meta;
 	enum cmdq_sec_rec_meta_type sec_meta_type;
 	u32 sec_meta_size;
+
+	/* Readback slot protection */
+	s32 slot_ids[8];
 };
 
 /* TODO: add controller support */
@@ -1009,6 +1012,8 @@ s32 cmdq_pkt_flush_async_ex(struct cmdqRecStruct *handle,
 	CmdqAsyncFlushCB cb, u64 user_data, bool auto_release);
 
 s32 cmdq_pkt_stop(struct cmdqRecStruct *handle);
+
+void cmdq_core_dump_active(void);
 
 /* mailbox helper functions */
 

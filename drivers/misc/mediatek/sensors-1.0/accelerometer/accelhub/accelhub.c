@@ -1,15 +1,6 @@
-/* accelhub motion sensor driver
- *
- * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (c) 2019 MediaTek Inc.
  */
 
 #define pr_fmt(fmt) "[Gsensor] " fmt
@@ -19,6 +10,8 @@
 #include <SCP_sensorHub.h>
 #include <accel.h>
 #include <hwmsensor.h>
+/*Added by TINNO for sensor dev info*/
+#include "../../../../../tinno/common_features/dev_info/dev_info.h"
 
 #define DEBUG 1
 #define SW_CALIBRATION
@@ -411,6 +404,18 @@ static void scp_init_work_done(struct work_struct *work)
 	int32_t cfg_data[6] = {0};
 #endif
 
+	/*Added by TINNO for sensor dev info*/
+	{
+		struct sensorInfo_t acc_info;
+		int ret = sensor_set_cmd_to_hub(ID_ACCELEROMETER,
+			CUST_ACTION_GET_SENSOR_INFO, &acc_info);
+		if (ret < 0)
+			pr_err_ratelimited("get acc info failed.\n");
+		else
+			FULL_PRODUCT_DEVICE_INFO(ID_GSENSOR, acc_info.name);
+
+	}
+
 	if (atomic_read(&obj->scp_init_done) == 0) {
 		pr_debug("scp is not ready to send cmd\n");
 		return;
@@ -573,10 +578,10 @@ static int gsensor_factory_get_cali(int32_t data[3])
 	}
 #else
 	err = wait_for_completion_timeout(&obj->calibration_done,
-					  msecs_to_jiffies(3000));
+					  msecs_to_jiffies(1000));
 	if (!err) {
-		pr_err("%s fail!\n", __func__);
-		return -1;
+		pr_err("%s always get cali data!\n", __func__);
+		/*return -1;*/
 	}
 	spin_lock(&calibration_lock);
 	data[ACCELHUB_AXIS_X] = obj->static_cali[ACCELHUB_AXIS_X];

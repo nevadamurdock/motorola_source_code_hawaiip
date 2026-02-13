@@ -1,15 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2019 MediaTek Inc.
- * Author: JB Tsai <jb.tsai@mediatek.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Copyright (c) 2020 MediaTek Inc.
  */
 
 #ifndef __DEBUG_DRIVER_H__
@@ -41,7 +32,7 @@
 #define APU_LOG_SIZE (512*1024)
 
 void apu_dbg_print(const char *fmt, ...);
-void apusys_dump_init(struct device *dev);
+int apusys_dump_init(struct device *dev);
 void apusys_dump_exit(struct device *dev);
 
 #endif /* __DEBUG_DRIVER_H__ */

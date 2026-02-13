@@ -1,14 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
 
 #ifndef TCPM_H_
@@ -546,8 +538,6 @@ enum tcp_dpm_return_code {
 	TCP_DPM_RET_DROP_ERROR_REOCVERY,
 	TCP_DPM_RET_DROP_SEND_BIST,
 	TCP_DPM_RET_DROP_PE_BUSY,	/* SinkTXNg*/
-	TCP_DPM_RET_DROP_DISCARD,
-	TCP_DPM_RET_DROP_UNEXPECTED,
 
 	TCP_DPM_RET_WAIT,
 	TCP_DPM_RET_REJECT,

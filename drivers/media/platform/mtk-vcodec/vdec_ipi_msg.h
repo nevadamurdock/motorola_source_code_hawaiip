@@ -1,16 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2016 MediaTek Inc.
- * Author: PC Chen <pc.chen@mediatek.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
 
 #ifndef _VDEC_IPI_MSG_H_
@@ -114,7 +104,8 @@ enum vdec_get_param_type {
 	GET_PARAM_PLATFORM_SUPPORTED_FIX_BUFFERS_SVP,
 	GET_PARAM_INTERLACING,
 	GET_PARAM_CODEC_TYPE,
-	GET_PARAM_INPUT_DRIVEN
+	GET_PARAM_INPUT_DRIVEN,
+	GET_PARAM_DEC_LOG
 };
 
 /*

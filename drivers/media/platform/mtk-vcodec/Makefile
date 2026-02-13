@@ -1,3 +1,9 @@
+ifeq (y, $(filter y, $(CONFIG_MACH_MT6781)))
+MTK_PLATFORM := mt6781
+else
+MTK_PLATFORM := $(CONFIG_MTK_PLATFORM:"%"=%)
+endif
+
 ifeq (y, $(filter y, $(CONFIG_MACH_MT6893)))
 MTK_PLATFORM := mt6885
 endif
@@ -24,7 +30,6 @@ mtk-vcodec-dec-y := mtk_vcodec_dec_drv.o \
 
 ifdef CONFIG_VIDEO_MEDIATEK_VCU
 	mtk-vcodec-dec-y += vdec/vdec_common_if.o \
-		vdec/vdec_log_if.o \
 		vdec_vcu_if.o
 endif
 ifdef CONFIG_VIDEO_MEDIATEK_VPU
@@ -41,7 +46,6 @@ mtk-vcodec-enc-y := mtk_vcodec_enc.o \
 
 ifdef CONFIG_VIDEO_MEDIATEK_VCU
 	mtk-vcodec-enc-y += venc/venc_common_if.o \
-		venc/venc_log_if.o \
 		venc_vcu_if.o
 endif
 ifdef CONFIG_VIDEO_MEDIATEK_VPU
@@ -69,13 +73,14 @@ ccflags-y += -I$(srctree)/drivers/media/platform/mtk-videobuf
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/smi
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/smi/$(MTK_PLATFORM)
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/smi/variant
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/mmqos
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/base/power/qos/$(MTK_PLATFORM)
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/$(MTK_PLATFORM)/include
 ccflags-y += -I$(srctree)/drivers/iommu/
 ccflags-y += -I$(srctree)/arch/arm
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/mmdvfs
-ccflags-y += -I$(srctree)/drivers/misc/mediatek/base/power/slbc
-ccflags-y += -I$(srctree)/drivers/staging/android/ion
-ccflags-y += -I$(srctree)/drivers/staging/android/ion/mtk
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/slbc
+ccflags-y += -I$(srctree)/drivers/staging/android/mtk_ion
+ccflags-y += -I$(srctree)/drivers/staging/android/mtk_ion/mtk
 

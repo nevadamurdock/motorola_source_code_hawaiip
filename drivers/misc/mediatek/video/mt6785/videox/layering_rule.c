@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #include <linux/delay.h>
 #include <linux/sched.h>
@@ -508,8 +500,7 @@ static bool filter_by_hw_limitation(struct disp_layer_info *disp_info)
 
 static int get_mapping_table(enum DISP_HW_MAPPING_TB_TYPE tb_type, int param);
 
-void copy_hrt_bound_table(int is_larb, int *hrt_table,
-	int active_config_id)
+void copy_hrt_bound_table(int is_larb, int *hrt_table)
 {
 	unsigned long flags = 0;
 	int valid_num, ovl_bound;
@@ -522,7 +513,7 @@ void copy_hrt_bound_table(int is_larb, int *hrt_table,
 	/* update table if hrt bw is enabled */
 	spin_lock_irqsave(&hrt_table_lock, flags);
 #ifdef MTK_FB_MMDVFS_SUPPORT
-	valid_num = layering_get_valid_hrt(active_config_id);
+	valid_num = layering_get_valid_hrt();
 #else
 	valid_num = 200;
 #endif
@@ -656,7 +647,7 @@ static bool _rollback_all_to_GPU_for_idle(void)
 	return true;
 }
 
-unsigned long long layering_get_frame_bw(int active_cfg_id)
+unsigned long long layering_get_frame_bw(void)
 {
 	static unsigned long long bw_base;
 	unsigned int timing_fps = 60;
@@ -669,7 +660,7 @@ unsigned long long layering_get_frame_bw(int active_cfg_id)
 #ifdef CONFIG_MTK_HIGH_FRAME_RATE
 	/* should use the real timing fps such as VFP solution*/
 	primary_display_get_cfg_fps(
-			active_cfg_id, NULL, &_vact_timing_FPS);
+			0, NULL, &_vact_timing_FPS);
 	timing_fps = _vact_timing_FPS / 100;
 #endif
 	/*ToDo: Resolution switch
@@ -682,14 +673,14 @@ unsigned long long layering_get_frame_bw(int active_cfg_id)
 	return bw_base;
 }
 #ifdef MTK_FB_MMDVFS_SUPPORT
-int layering_get_valid_hrt(int active_config_id)
+int layering_get_valid_hrt(void)
 {
 	unsigned long long dvfs_bw;
 	unsigned long long tmp;
 	int tmp_bw;
 
 	tmp_bw = mm_hrt_get_available_hrt_bw(get_virtual_port(VIRTUAL_DISP));
-	tmp = layering_get_frame_bw(active_config_id);
+	tmp = layering_get_frame_bw();
 	if (tmp_bw < 0) {
 		DISP_PR_ERR("avail BW less than 0,DRAMC not ready!\n");
 		dvfs_bw = 200;

@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #include <linux/delay.h>
 #include <linux/sched.h>
@@ -330,6 +322,8 @@ int _blocking_flush(void)
 #endif
 	return ret;
 }
+
+#ifndef CONFIG_MTK_MT6382_BDG
 static int _vfp_chg_callback(unsigned long userdata);
 
 int _vfp_chg_callback(unsigned long userdata)
@@ -357,6 +351,8 @@ int _vfp_chg_callback(unsigned long userdata)
 	}
 	return 0;
 }
+#endif
+
 static int primary_display_dsi_vfp_change(int state)
 {
 	int ret = 0;
@@ -422,10 +418,11 @@ static int primary_display_dsi_vfp_change(int state)
 			qhandle, CMDQ_STOP_VDO_MODE, 0);
 #endif
 	}
-#ifdef CONFIG_MTK_MT6382_BDG
 	dpmgr_path_ioctl(primary_get_dpmgr_handle(), qhandle,
 				 DDP_DSI_PORCH_CHANGE,
 				 &apply_vfp);
+
+#ifdef CONFIG_MTK_MT6382_BDG
 
 		dpmgr_path_build_cmdq(primary_get_dpmgr_handle(), qhandle,
 				CMDQ_START_VDO_MODE, 0);
@@ -436,7 +433,7 @@ static int primary_display_dsi_vfp_change(int state)
 				primary_get_dpmgr_handle()), qhandle, 0);
 
 		cmdqRecFlush(qhandle);
-#endif
+#else
 	if (primary_display_is_support_ARR() && apply_vfp != 0) {
 		cmdqRecBackupUpdateSlot(qhandle, hSlot, 0, state);
 		cmdqRecBackupUpdateSlot(qhandle, hSlot, 1, apply_vfp);
@@ -445,7 +442,7 @@ static int primary_display_dsi_vfp_change(int state)
 	} else {
 		cmdqRecFlushAsync(qhandle);
 	}
-
+#endif
 	cmdqRecDestroy(qhandle);
 
 	/*ToDo: ARR, send cmd to DDIC, tell DDIC FPS changed*/
@@ -1373,7 +1370,7 @@ static int hrt_bw_cond_change_cb(struct notifier_block *nb,
 		}
 		/* switch to decouple mode */
 		if (disp_mgr_has_mem_session() ||
-				layering_get_valid_hrt(active_cfg_id) >= 400) {
+				layering_get_valid_hrt() >= 400) {
 			/* enable HRT throttle */
 			DISPINFO("Cam trigger repain\n");
 			hrt_idx = layering_rule_get_hrt_idx();
@@ -1437,8 +1434,9 @@ int primary_display_lowpower_init(void)
 	backup_vfp_for_lp_cust(params->dsi.vertical_frontporch_for_low_power);
 
 	/* init idlemgr */
-	if (disp_helper_get_option(DISP_OPT_IDLE_MGR) &&
-	    get_boot_mode() == NORMAL_BOOT)
+	if (disp_helper_get_option(DISP_OPT_IDLE_MGR)
+		/* get_boot_mode() == NORMAL_BOOT */
+		)
 		primary_display_idlemgr_init();
 
 	if (disp_helper_get_option(DISP_OPT_SODI_SUPPORT))
@@ -1850,8 +1848,9 @@ void external_display_sodi_rule_init(void)
 int external_display_lowpower_init(void)
 {
 	/* init idlemgr */
-	if (disp_helper_get_option(DISP_OPT_IDLE_MGR) &&
-	    get_boot_mode() == NORMAL_BOOT)
+	if (disp_helper_get_option(DISP_OPT_IDLE_MGR)
+		/* get_boot_mode() == NORMAL_BOOT */
+		)
 		external_display_idlemgr_init();
 
 	if (disp_helper_get_option(DISP_OPT_SODI_SUPPORT))

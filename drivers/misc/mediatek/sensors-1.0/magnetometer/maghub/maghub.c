@@ -1,15 +1,6 @@
-/* maghub.c - maghub compass driver
- *
- * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2019 MediaTek Inc.
  */
 
 #define pr_fmt(fmt) "[Msensor] " fmt
@@ -19,6 +10,8 @@
 #include "mag.h"
 #include <SCP_sensorHub.h>
 #include "SCP_power_monitor.h"
+/*Added by TINNO for sensor dev info*/
+#include "../../../../../tinno/common_features/dev_info/dev_info.h"
 
 #define MAGHUB_DEV_NAME         "mag_hub"
 #define DRIVER_VERSION          "1.0.1"
@@ -284,6 +277,10 @@ static void scp_init_work_done(struct work_struct *work)
 			sizeof(mag_libinfo.libname));
 		mag_libinfo.layout = obj->mag_info.mag_dev_info.layout;
 		mag_libinfo.deviceid = obj->mag_info.mag_dev_info.deviceid;
+		/*Added by TINNO for sensor dev info*/
+		if (strlen(obj->mag_info.name)) {
+			FULL_PRODUCT_DEVICE_INFO(ID_MSENSOR, obj->mag_info.name);
+		}
 
 		err = mag_info_record(&mag_libinfo);
 		return;

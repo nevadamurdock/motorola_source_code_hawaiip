@@ -13,8 +13,8 @@
 
 #if defined(CONFIG_SND_SOC_MTK_AUDIO_DSP)
 #include "audio_task.h"
-#include "../audio_dsp/mtk-dsp-common_define.h"
-#include "../audio_dsp/mtk-dsp-mem-control.h"
+#include "mtk-dsp-common_define.h"
+#include "mtk-dsp-mem-control.h"
 #include "audio_messenger_ipi.h"
 #endif
 

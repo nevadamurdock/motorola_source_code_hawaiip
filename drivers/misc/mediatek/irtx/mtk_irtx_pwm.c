@@ -1,14 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2019 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
 
 #include <linux/delay.h>
@@ -75,8 +67,13 @@ static int mtk_pwm_ir_tx(struct rc_dev *rcdev, unsigned int *txbuf,
 	pr_info("%s() irtx len=0x%x, pwm=%d\n", __func__,
 		(unsigned int)count, (unsigned int)pwm_ir->pwm_ch);
 
-	/* lirc txbuf is odd, the last one is null appeneded by userspace */
-	if (--count == 0)
+	/* lirc txbuf is odd, consumerir will append a "1" at last
+	 * if original pattern_len is even.
+	 */
+	if ((count > 0) && (txbuf[count-1] == 1))
+		count--;
+
+	if (count == 0)
 		return 0;
 
 	// pwm_ir.cycle: whole cycle,  pwm_ir.duty_cycle: high period

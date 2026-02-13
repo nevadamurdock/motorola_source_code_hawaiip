@@ -1,14 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * Copyright (c) 2015 MediaTek Inc.
  */
 
 #include <linux/arm-smccc.h>
@@ -33,41 +25,6 @@ void cmdq_sec_mtee_setup_context(struct cmdq_sec_mtee_context *tee)
 	cmdq_msg("%s cmdq_mtee:%d", __func__, cmdq_mtee);
 }
 
-// TODO
-#if 0
-s32 cmdq_sec_init_context(struct cmdq_sec_tee_context *tee)
-{
-	s32 status;
-
-	cmdq_msg("[SEC] enter %s", __func__);
-#if defined(CONFIG_MICROTRUST_TEE_SUPPORT)
-	while (!is_teei_ready()) {
-		cmdq_msg("[SEC] Microtrust TEE is not ready, wait...");
-		msleep(1000);
-	}
-#elif defined(CONFIG_TRUSTONIC_TEE_SUPPORT)
-	while (!is_mobicore_ready()) {
-		cmdq_msg("[SEC] Trustonic TEE is not ready, wait...");
-		msleep(1000);
-	}
-#endif
-	cmdq_log("[SEC]TEE is ready");
-
-	status = TEEC_InitializeContext(NULL, &tee->gp_context);
-	if (status != TEEC_SUCCESS)
-		cmdq_err("[SEC]init_context fail: status:0x%x", status);
-	else
-		cmdq_msg("[SEC]init_context: status:0x%x", status);
-	return status;
-}
-
-s32 cmdq_sec_deinit_context(struct cmdq_sec_tee_context *tee)
-{
-	TEEC_FinalizeContext(&tee->gp_context);
-	return 0;
-}
-#endif
-
 s32 cmdq_sec_mtee_allocate_shared_memory(struct cmdq_sec_mtee_context *tee,
 	const dma_addr_t MVABase, const u32 size)
 {
@@ -83,11 +40,11 @@ s32 cmdq_sec_mtee_allocate_shared_memory(struct cmdq_sec_mtee_context *tee,
 	status = KREE_RegisterSharedmem(tee->wsm_pHandle,
 		&tee->mem_handle, &tee->mem_param);
 	if (status != TZ_RESULT_SUCCESS)
-		cmdq_err("%s: session:%#x handle:%#x size:%#x buffer:%#x",
+		cmdq_err("%s: session:%#x handle:%#x size:%#x buffer:%p",
 			__func__, tee->wsm_pHandle, tee->mem_handle,
 			tee->mem_param.size, tee->mem_param.buffer);
 	else
-		cmdq_log("%s: session:%#x handle:%#x size:%#x buffer:%#x",
+		cmdq_log("%s: session:%#x handle:%#x size:%#x buffer:%p",
 			__func__, tee->wsm_pHandle, tee->mem_handle,
 			tee->mem_param.size, tee->mem_param.buffer);
 	return status;
@@ -113,20 +70,19 @@ s32 cmdq_sec_mtee_allocate_wsm(struct cmdq_sec_mtee_context *tee,
 	if (!*wsm_buffer)
 		return -ENOMEM;
 #endif
-
 	tee->wsm_param.size = size;
 	tee->wsm_param.buffer = (void *)(u64)virt_to_phys(*wsm_buffer);
 	status = KREE_RegisterSharedmem(tee->wsm_pHandle,
 		&tee->wsm_handle, &tee->wsm_param);
 	if (status != TZ_RESULT_SUCCESS) {
-		cmdq_err("%s: session:%#x handle:%#x size:%#x buffer:%p:%#x",
+		cmdq_err("%s: session:%#x handle:%#x size:%#x buffer:%p",
 			__func__, tee->wsm_pHandle, tee->wsm_handle,
-			tee->wsm_param.size, *wsm_buffer, *wsm_buffer);
+			tee->wsm_param.size, *wsm_buffer);
 		return status;
 	}
-	cmdq_log("%s: session:%#x handle:%#x size:%#x buffer:%p:%#x",
+	cmdq_log("%s: session:%#x handle:%#x size:%#x buffer:%p",
 		__func__, tee->wsm_pHandle, tee->wsm_handle,
-		tee->wsm_param.size, *wsm_buffer, *wsm_buffer);
+		tee->wsm_param.size, *wsm_buffer);
 
 #ifndef CMDQ_LATE_INIT_SUPPORT
 	*wsm_buf_ex = kzalloc(size_ex, GFP_KERNEL);
@@ -139,13 +95,13 @@ s32 cmdq_sec_mtee_allocate_wsm(struct cmdq_sec_mtee_context *tee,
 	status = KREE_RegisterSharedmem(tee->wsm_pHandle,
 		&tee->wsm_ex_handle, &tee->wsm_ex_param);
 	if (status != TZ_RESULT_SUCCESS)
-		cmdq_err("%s: session:%#x handle:%#x size:%#x buffer:%p:%#x",
+		cmdq_err("%s: session:%#x handle:%#x size:%#x buffer:%p",
 			__func__, tee->wsm_pHandle, tee->wsm_ex_handle,
-			tee->wsm_ex_param.size, *wsm_buf_ex, *wsm_buf_ex);
+			tee->wsm_ex_param.size, *wsm_buf_ex);
 	else
-		cmdq_log("%s: session:%#x handle:%#x size:%#x buffer:%p:%#x",
+		cmdq_log("%s: session:%#x handle:%#x size:%#x buffer:%p",
 			__func__, tee->wsm_pHandle, tee->wsm_ex_handle,
-			tee->wsm_ex_param.size, *wsm_buf_ex, *wsm_buf_ex);
+			tee->wsm_ex_param.size, *wsm_buf_ex);
 
 #ifndef CMDQ_LATE_INIT_SUPPORT
 	*wsm_buf_ex2 = kzalloc(size_ex2, GFP_KERNEL);
@@ -158,13 +114,13 @@ s32 cmdq_sec_mtee_allocate_wsm(struct cmdq_sec_mtee_context *tee,
 	status = KREE_RegisterSharedmem(tee->wsm_pHandle,
 		&tee->wsm_ex2_handle, &tee->wsm_ex2_param);
 	if (status != TZ_RESULT_SUCCESS)
-		cmdq_err("%s: session:%#x handle:%#x size:%#x buffer:%p:%#x",
+		cmdq_err("%s: session:%#x handle:%#x size:%#x buffer:%p",
 			__func__, tee->wsm_pHandle, tee->wsm_ex2_handle,
-			tee->wsm_ex2_param.size, *wsm_buf_ex2, *wsm_buf_ex2);
+			tee->wsm_ex2_param.size, *wsm_buf_ex2);
 	else
-		cmdq_log("%s: session:%#x handle:%#x size:%#x buffer:%p:%#x",
+		cmdq_log("%s: session:%#x handle:%#x size:%#x buffer:%p",
 			__func__, tee->wsm_pHandle, tee->wsm_ex2_handle,
-			tee->wsm_ex2_param.size, *wsm_buf_ex2, *wsm_buf_ex2);
+			tee->wsm_ex2_param.size, *wsm_buf_ex2);
 
 	return status;
 }
@@ -181,7 +137,7 @@ s32 cmdq_sec_mtee_free_wsm(struct cmdq_sec_mtee_context *tee,
 		return -EINVAL;
 
 	KREE_UnregisterSharedmem(tee->wsm_pHandle, tee->wsm_handle);
-	kfree(*wsm_buffer);
+	vfree(*wsm_buffer);
 	*wsm_buffer = NULL;
 	return 0;
 }

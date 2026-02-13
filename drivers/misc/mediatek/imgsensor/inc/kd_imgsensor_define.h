@@ -1,14 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
 
 #ifndef _KD_IMGSENSOR_DATA_H
@@ -591,6 +583,7 @@ struct ACDK_SENSOR_INFO_STRUCT {
 	MUINT32 Custom13DelayFrame;
 	MUINT32 Custom14DelayFrame;
 	MUINT32 Custom15DelayFrame;
+
 	MUINT16 SensorGrabStartX;
 	MUINT16 SensorGrabStartY;
 	MUINT16 SensorGrabStartX_PRV;
@@ -689,6 +682,7 @@ struct ACDK_SENSOR_INFO_STRUCT {
 	MUINT16 SensorVerFOV;
 	MUINT16 SensorOrientation;
 	MUINT32 SensorModuleID;
+	MUINT8 TinnoModuleSn[16];//Tinno add for read module sn
 };
 
 #define ACDK_SENSOR_INFO2_STRUCT struct ACDK_SENSOR_INFO_STRUCT
@@ -993,6 +987,12 @@ struct SET_SENSOR_AWB_GAIN {
 	MUINT32 ABS_GAIN_R;
 	MUINT32 ABS_GAIN_B;
 	MUINT32 ABS_GAIN_GB;
+};
+struct SET_SENSOR_PATTERN_SOLID_COLOR {
+	MUINT32 COLOR_R;
+	MUINT32 COLOR_Gr;
+	MUINT32 COLOR_Gb;
+	MUINT32 COLOR_B;
 };
 
 struct SET_SENSOR_ISO {
@@ -1552,4 +1552,5 @@ struct IMGSENSOR_AE_FRM_MODE {
 	MUINT32 frame_mode_3:4;
 	MUINT32 frame_mode_4:4;
 };
+
 #endif              /* _KD_IMGSENSOR_DATA_H */

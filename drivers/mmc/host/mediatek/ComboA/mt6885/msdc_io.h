@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2017 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #ifndef _MSDC_IO_H_
 #define _MSDC_IO_H_
@@ -99,31 +91,19 @@ void msdc_dump_clock_sts(char **buff, unsigned long *size,
 	} while (0)
 #define msdc_clk_prepare_enable(host) \
 	do { \
-		int lock; \
-		lock = spin_is_locked(&host->lock); \
-		if (lock) \
-			spin_unlock(&host->lock); \
 		(void)clk_prepare_enable(host->clk_ctl); \
 		if (host->aes_clk_ctl) \
 			(void)clk_prepare_enable(host->aes_clk_ctl); \
 		if (host->hclk_ctl) \
 			(void)clk_prepare_enable(host->hclk_ctl); \
-		if (lock) \
-			spin_lock(&host->lock); \
 	} while (0)
 #define msdc_clk_disable_unprepare(host) \
 	do { \
-		int lock; \
-		lock = spin_is_locked(&host->lock); \
-		if (lock) \
-			spin_unlock(&host->lock); \
 		clk_disable_unprepare(host->clk_ctl); \
 		if (host->aes_clk_ctl) \
 			clk_disable_unprepare(host->aes_clk_ctl); \
 		if (host->hclk_ctl) \
 			clk_disable_unprepare(host->hclk_ctl); \
-		if (lock) \
-			spin_lock(&host->lock); \
 	} while (0)
 #else
 #define msdc_clk_enable(host)

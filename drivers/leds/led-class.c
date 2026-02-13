@@ -65,6 +65,32 @@ unlock:
 }
 static DEVICE_ATTR_RW(brightness);
 
+extern void lcm_hbm(int onoff);
+extern int hbm;
+static ssize_t backlight_hbm_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+    //char p[10];
+	//printk("liye:backlight_hbm_read,lcm_hbm=%d\n",hbm);
+	return sprintf(buf, "%u\n", hbm);
+}
+
+static ssize_t backlight_hbm_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+    ssize_t ret;
+	int hbm_enable;
+    hbm_enable = simple_strtol(buf,NULL, 0);
+    //printk("liye:1 hbm_enable=%d,lcm_hbm=%d\n",hbm_enable,lcm_hbm);
+		if (hbm_enable==1)
+			lcm_hbm(1);
+	    if (hbm_enable==0)
+			lcm_hbm(0);
+	//printk("liye:2 hbm_enable=%d,lcm_hbm=%d\n",hbm_enable,lcm_hbm);
+	ret =size;
+	return ret;
+}
+static DEVICE_ATTR_RW(backlight_hbm);
 static ssize_t max_brightness_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -88,6 +114,7 @@ static const struct attribute_group led_trigger_group = {
 static struct attribute *led_class_attrs[] = {
 	&dev_attr_brightness.attr,
 	&dev_attr_max_brightness.attr,
+	&dev_attr_backlight_hbm.attr,
 	NULL,
 };
 
@@ -173,6 +200,7 @@ void led_classdev_suspend(struct led_classdev *led_cdev)
 {
 	led_cdev->flags |= LED_SUSPENDED;
 	led_set_brightness_nopm(led_cdev, 0);
+	flush_work(&led_cdev->set_brightness_work);
 }
 EXPORT_SYMBOL_GPL(led_classdev_suspend);
 
@@ -260,10 +288,14 @@ int of_led_classdev_register(struct device *parent, struct device_node *np,
 	if (ret < 0)
 		return ret;
 
+	mutex_init(&led_cdev->led_access);
+	mutex_lock(&led_cdev->led_access);
 	led_cdev->dev = device_create_with_groups(leds_class, parent, 0,
 				led_cdev, led_cdev->groups, "%s", name);
-	if (IS_ERR(led_cdev->dev))
+	if (IS_ERR(led_cdev->dev)) {
+		mutex_unlock(&led_cdev->led_access);
 		return PTR_ERR(led_cdev->dev);
+	}
 	led_cdev->dev->of_node = np;
 
 	if (ret)
@@ -274,6 +306,7 @@ int of_led_classdev_register(struct device *parent, struct device_node *np,
 		ret = led_add_brightness_hw_changed(led_cdev);
 		if (ret) {
 			device_unregister(led_cdev->dev);
+			mutex_unlock(&led_cdev->led_access);
 			return ret;
 		}
 	}
@@ -285,7 +318,6 @@ int of_led_classdev_register(struct device *parent, struct device_node *np,
 #ifdef CONFIG_LEDS_BRIGHTNESS_HW_CHANGED
 	led_cdev->brightness_hw_changed = -1;
 #endif
-	mutex_init(&led_cdev->led_access);
 	/* add to the list of leds */
 	down_write(&leds_list_lock);
 	list_add_tail(&led_cdev->node, &leds_list);
@@ -301,6 +333,8 @@ int of_led_classdev_register(struct device *parent, struct device_node *np,
 #ifdef CONFIG_LEDS_TRIGGERS
 	led_trigger_set_default(led_cdev);
 #endif
+
+	mutex_unlock(&led_cdev->led_access);
 
 	dev_dbg(parent, "Registered led device: %s\n",
 			led_cdev->name);

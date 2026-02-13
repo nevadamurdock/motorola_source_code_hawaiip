@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #include "disp_drv_log.h"
 #include "ion_drv.h"
@@ -118,7 +110,7 @@ _get_session_sync_info(unsigned int session)
 	    DISP_SESSION_TYPE(session) != DISP_SESSION_MEMORY &&
 	    DISP_SESSION_TYPE(session) != DISP_SESSION_EXTERNAL) {
 		DISPERR("invalid session id:0x%08x\n", session);
-		return NULL;
+		ASSERT(0);
 	}
 
 	mutex_lock(&_disp_fence_mutex);
@@ -240,8 +232,10 @@ _get_session_sync_info(unsigned int session)
 	}
 done:
 
-	if (s_info == NULL)
+	if (s_info == NULL) {
 		DISPERR("wrong session_id:%d, 0x%08x\n", session, session);
+		ASSERT(0);
+	}
 
 	mutex_unlock(&_disp_fence_mutex);
 	return s_info;
@@ -374,7 +368,7 @@ static size_t mtkfb_ion_phys_mmu_addr(struct ion_client *client,
 				      unsigned int *mva,
 					  int type)
 {
-	size_t size;
+	size_t size = 0;
 	ion_phys_addr_t phy_addr = 0;
 	struct ion_mm_data mm_data;
 
@@ -488,6 +482,8 @@ unsigned int mtkfb_query_buf_va(unsigned int session_id, unsigned int layer_id,
 	ASSERT(layer_id < DISP_SESSION_TIMELINE_COUNT);
 
 	session_info = _get_session_sync_info(session_id);
+	if (session_info == 0)
+		return 0;
 	layer_info = &(session_info->session_layer_info[layer_id]);
 	if (layer_id != layer_info->layer_id) {
 		MTKFB_FENCE_ERR("wrong layer id %d(rt), %d(in)!\n",
@@ -525,6 +521,8 @@ unsigned int mtkfb_query_release_idx(unsigned int session_id,
 	struct disp_sync_info *l_info;
 
 	s_info = _get_session_sync_info(session_id);
+	if (s_info == 0)
+		return 0;
 	l_info = &(s_info->session_layer_info[layer_id]);
 
 	if (layer_id != l_info->layer_id) {
@@ -589,6 +587,8 @@ unsigned int mtkfb_update_buf_ticket(unsigned int session_id,
 	}
 
 	session_info = _get_session_sync_info(session_id);
+	if (session_info == 0)
+		return 0;
 	layer_info = &(session_info->session_layer_info[layer_id]);
 
 	if (layer_id != layer_info->layer_id) {
@@ -619,6 +619,8 @@ unsigned int mtkfb_query_idx_by_ticket(unsigned int session_id,
 	struct disp_sync_info *l_info;
 
 	s_info = _get_session_sync_info(session_id);
+	if (s_info == 0)
+		return 0;
 	l_info = &(s_info->session_layer_info[layer_id]);
 
 	if (layer_id != l_info->layer_id) {
@@ -651,6 +653,8 @@ bool mtkfb_update_buf_info_new(unsigned int session_id, unsigned int mva_offset,
 	}
 
 	s_info = _get_session_sync_info(session_id);
+	if (s_info == 0)
+		return 0;
 	l_info = &(s_info->session_layer_info[buf_info->layer_id]);
 	if (buf_info->layer_id != l_info->layer_id) {
 		DISPERR("wrong layer id %d(rt), %d(in)!\n",
@@ -685,6 +689,8 @@ unsigned int mtkfb_query_buf_info(unsigned int session_id,
 	int query_info = 0;
 
 	session_info = _get_session_sync_info(session_id);
+	if (session_info == 0)
+		return 0;
 	layer_info = &(session_info->session_layer_info[layer_id]);
 	if (layer_id != layer_info->layer_id) {
 		DISPERR("wrong layer id %d(rt), %d(in)!\n",
@@ -1162,7 +1168,7 @@ struct mtkfb_fence_buf_info *disp_sync_prepare_buf(struct disp_buffer_info *buf)
 	unsigned int session_id = 0;
 	unsigned int timeline_id = 0;
 	struct mtkfb_fence_buf_info *buf_info = NULL;
-	struct fence_data data;
+	struct mtk_sync_create_fence_data data;
 	struct disp_sync_info *layer_info = NULL;
 	struct disp_session_sync_info *session_info = NULL;
 

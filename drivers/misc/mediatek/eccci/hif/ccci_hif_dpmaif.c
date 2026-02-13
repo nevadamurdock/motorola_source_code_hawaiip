@@ -1,16 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
-
+#include <linux/atomic.h>
 #include <linux/list.h>
 #include <linux/device.h>
 #include <linux/module.h>
@@ -34,11 +26,12 @@
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
 #include <linux/syscore_ops.h>
-#if defined(CONFIG_MTK_AEE_FEATURE)
-#include <mt-plat/aee.h>
-#endif
+#include <linux/dma-mapping.h>
+#include <linux/clk.h>
+#include <linux/tcp.h>
+#include <linux/ipv6.h>
+#include <net/ipv6.h>
 
-#include "ccci_config.h"
 #include "ccci_core.h"
 #include "modem_sys.h"
 #include "ccci_bm.h"
@@ -51,13 +44,9 @@
 #include "ccci_fsm.h"
 #include "ccci_port.h"
 
-#include <linux/ip.h>
-#include <linux/tcp.h>
-#include <linux/ipv6.h>
-#include <net/ipv6.h>
-#define IPV4_VERSION (0x40)
-#define IPV6_VERSION (0x60)
-
+#if defined(CONFIG_MTK_AEE_FEATURE)
+#include <mt-plat/aee.h>
+#endif
 
 #ifdef PIT_USING_CACHE_MEM
 #include <asm/cacheflush.h>
@@ -66,20 +55,24 @@
 #if defined(CCCI_SKB_TRACE)
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM ccci
-
 #include <linux/tracepoint.h>
 #endif
+
+#define IPV4_VERSION (0x40)
+#define IPV6_VERSION (0x60)
 
 #define UIDMASK 0x80000000
 #define TAG "dpmaif"
 
 struct hif_dpmaif_ctrl *dpmaif_ctrl;
-
 static unsigned int g_dp_uid_mask_count;
 
-#ifdef USING_BATCHING
-#define BATCHING_PUSH_THRESH 176
-#endif
+
+/*static inline struct device *ccci_md_get_dev_by_id(int md_id)
+{
+	return &dpmaif_ctrl->plat_dev->dev;
+}*/
+
 
 /* =======================================================
  *
@@ -87,7 +80,6 @@ static unsigned int g_dp_uid_mask_count;
  *
  * ========================================================
  */
-
 #if defined(CCCI_SKB_TRACE)
 TRACE_EVENT(ccci_skb_rx,
 	TP_PROTO(unsigned long long *dl_delay),
@@ -109,7 +101,6 @@ TRACE_EVENT(ccci_skb_rx,
 		__entry->dl_delay[6], __entry->dl_delay[7])
 );
 #endif
-
 
 #define DPMA_DRB_LOG(fmt, args...) \
 do { \
@@ -223,7 +214,6 @@ static void dpmaif_dump_register(struct hif_dpmaif_ctrl *hif_ctrl, int buf_type)
 	/* open sram clock for debug sram needs sram clock. */
 	DPMA_WRITE_PD_MISC(DPMAIF_PD_AP_CG_EN, 0x36);
 #endif
-
 	CCCI_BUF_LOG_TAG(hif_ctrl->md_id, buf_type, TAG,
 		"dump AP DPMAIF SRAM pdn register\n");
 	ccci_util_mem_dump(hif_ctrl->md_id, buf_type,
@@ -243,7 +233,7 @@ static void dpmaif_dump_register(struct hif_dpmaif_ctrl *hif_ctrl, int buf_type)
 
 void dpmaif_dump_reg(void)
 {
-	if (dpmaif_ctrl == NULL)
+	if (!dpmaif_ctrl)
 		return;
 	dpmaif_dump_register(dpmaif_ctrl, CCCI_DUMP_REGISTER);
 }
@@ -398,16 +388,6 @@ static void dpmaif_dump_txq_remain(struct hif_dpmaif_ctrl *hif_ctrl,
 		       txq->drb_wr_idx, txq->drb_rd_idx, txq->drb_rel_rd_idx);
 		ccci_util_mem_dump(md_id, CCCI_DUMP_MEM_DUMP, txq->drb_base,
 			(txq->drb_size_cnt * sizeof(struct dpmaif_drb_pd)));
-#if 0
-		CCCI_MEM_LOG(md_id, TAG,
-			"dpmaif: drb(%d) skb base: 0x%p(%d*%d)\n",
-			txq->index, txq->drb_skb_base,
-			(int)sizeof(struct dpmaif_drb_skb),
-			hif_ctrl->txq[i].drb_size_cnt);
-		ccci_util_mem_dump(md_id, CCCI_DUMP_MEM_DUMP,
-			txq->drb_skb_base,
-			(txq->drb_size_cnt * sizeof(struct dpmaif_drb_skb)));
-#endif
 	}
 }
 
@@ -500,7 +480,7 @@ static void dump_drb_queue_data(unsigned int qno)
 
 /*actrually, length is dump flag's private argument*/
 static int dpmaif_dump_status(unsigned char hif_id,
-		enum MODEM_DUMP_FLAG flag, int length)
+		enum MODEM_DUMP_FLAG flag, void *buff, int length)
 {
 	struct hif_dpmaif_ctrl *hif_ctrl = dpmaif_ctrl;
 
@@ -536,8 +516,7 @@ static int dpmaif_dump_status(unsigned char hif_id,
 #if DPMAIF_TRAFFIC_MONITOR_INTERVAL
 static void dpmaif_clear_traffic_data(unsigned char hif_id)
 {
-	struct hif_dpmaif_ctrl *hif_ctrl =
-		(struct hif_dpmaif_ctrl *)ccci_hif_get_by_id(hif_id);
+	struct hif_dpmaif_ctrl *hif_ctrl = dpmaif_ctrl;
 
 	memset(hif_ctrl->tx_traffic_monitor, 0,
 		sizeof(hif_ctrl->tx_traffic_monitor));
@@ -572,9 +551,11 @@ static void dpmaif_clear_traffic_data(unsigned char hif_id)
 #endif
 
 #if DPMAIF_TRAFFIC_MONITOR_INTERVAL
-static void dpmaif_traffic_monitor_func(unsigned long data)
+static void dpmaif_traffic_monitor_func(struct timer_list *t)
 {
-	struct hif_dpmaif_ctrl *hif_ctrl = (struct hif_dpmaif_ctrl *)data;
+	struct hif_dpmaif_ctrl *hif_ctrl =
+			from_timer(hif_ctrl, t, traffic_monitor);
+
 	struct ccci_hif_traffic *tinfo = &hif_ctrl->traffic_info;
 	unsigned long q_rx_rem_nsec[DPMAIF_RXQ_NUM] = {0};
 	unsigned long isr_rem_nsec;
@@ -601,24 +582,19 @@ static void dpmaif_traffic_monitor_func(unsigned long data)
 
 	if (3 < DPMAIF_TXQ_NUM)
 		CCCI_REPEAT_LOG(hif_ctrl->md_id, TAG,
-			"net Txq0-3(status=0x%x)[%d]:%d-%d-%d(0x%x), %d-%d-%d(0x%x), %d-%d-%d(0x%x), %d-%d-%d(0x%x)\n",
-			q_state, hif_ctrl->txq[0].drb_size_cnt,
-			atomic_read(&hif_ctrl->txq[0].tx_budget),
+			"net Txq0-3(status=0x%x):%d-%d-%d, %d-%d-%d, %d-%d-%d, %d-%d-%d\n",
+			q_state, atomic_read(&hif_ctrl->txq[0].tx_budget),
 			hif_ctrl->tx_pre_traffic_monitor[0],
 			hif_ctrl->tx_traffic_monitor[0],
-			DPMA_READ_AO_UL(DPMAIF_ULQ_STA0_n(0)),
 			atomic_read(&hif_ctrl->txq[1].tx_budget),
 			hif_ctrl->tx_pre_traffic_monitor[1],
 			hif_ctrl->tx_traffic_monitor[1],
-			DPMA_READ_AO_UL(DPMAIF_ULQ_STA0_n(1)),
 			atomic_read(&hif_ctrl->txq[2].tx_budget),
 			hif_ctrl->tx_pre_traffic_monitor[2],
 			hif_ctrl->tx_traffic_monitor[2],
-			DPMA_READ_AO_UL(DPMAIF_ULQ_STA0_n(2)),
 			atomic_read(&hif_ctrl->txq[3].tx_budget),
 			hif_ctrl->tx_pre_traffic_monitor[3],
-			hif_ctrl->tx_traffic_monitor[3],
-			DPMA_READ_AO_UL(DPMAIF_ULQ_STA0_n(3)));
+			hif_ctrl->tx_traffic_monitor[3]);
 
 	isr_rem_nsec = (tinfo->latest_isr_time == 0 ?
 		0 : do_div(tinfo->latest_isr_time, NSEC_PER_SEC));
@@ -808,6 +784,7 @@ static void dump_drb_record(void)
  *
  * ========================================================
  */
+
 static int dpmaif_queue_broadcast_state(struct hif_dpmaif_ctrl *hif_ctrl,
 	enum HIF_STATE state, enum DIRECTION dir, unsigned char index)
 {
@@ -896,8 +873,10 @@ static int dpmaif_net_rx_push_thread(void *arg)
 	struct sk_buff *skb = NULL;
 	struct dpmaif_rx_queue *queue = (struct dpmaif_rx_queue *)arg;
 	struct hif_dpmaif_ctrl *hif_ctrl = dpmaif_ctrl;
+#ifndef CCCI_KMODULE_ENABLE
 #ifdef CCCI_SKB_TRACE
 	struct ccci_per_md *per_md_data = ccci_get_per_md_data(hif_ctrl->md_id);
+#endif
 #endif
 	int count = 0;
 	int ret;
@@ -935,24 +914,24 @@ static int dpmaif_net_rx_push_thread(void *arg)
 			ret = wait_event_interruptible(queue->rx_wq,
 				(!skb_queue_empty(&queue->skb_list.skb_list) ||
 				kthread_should_stop()));
-			ccmni_clr_flush_timer();
 			if (ret == -ERESTARTSYS)
-				continue;
+				continue;	/* FIXME */
 		}
-
+		if (kthread_should_stop())
+			break;
 		skb = ccci_skb_dequeue(&queue->skb_list);
 		if (!skb)
 			continue;
 #ifdef MT6297
 		mtk_ccci_add_dl_pkt_size(skb->len);
 #endif
-
+#ifndef CCCI_KMODULE_ENABLE
 #ifdef CCCI_SKB_TRACE
 		per_md_data->netif_rx_profile[6] = sched_clock();
 		if (count > 0)
 			skb->tstamp = sched_clock();
 #endif
-
+#endif
 #ifdef USING_BATCHING
 		lhif_h = (struct lhif_header *)skb->data;
 		skb_pull(skb, sizeof(struct lhif_header));
@@ -979,15 +958,17 @@ static int dpmaif_net_rx_push_thread(void *arg)
 			}
 		}
 #else
-		ccci_md_recv_skb(hif_ctrl->md_id, hif_ctrl->hif_id, skb);
+		ccci_port_recv_skb(hif_ctrl->md_id, hif_ctrl->hif_id, skb,
+			CLDMA_NET_DATA);
 		count++;
 #endif
-
+#ifndef CCCI_KMODULE_ENABLE
 #ifdef CCCI_SKB_TRACE
 		per_md_data->netif_rx_profile[6] = sched_clock() -
 			per_md_data->netif_rx_profile[6];
 		per_md_data->netif_rx_profile[5] = count;
 		trace_ccci_skb_rx(per_md_data->netif_rx_profile);
+#endif
 #endif
 	}
 	return 0;
@@ -1069,10 +1050,10 @@ static inline void dpmaif_rx_msg_pit(struct dpmaif_rx_queue *rxq,
 static int dpmaif_alloc_rx_frag(struct dpmaif_bat_request *bat_req,
 		unsigned char q_num, unsigned int buf_cnt, int blocking)
 {
-	struct dpmaif_bat_t *cur_bat = NULL;
-	struct dpmaif_bat_page_t *cur_page = NULL;
-	void *data = NULL;
-	struct page *page = NULL;
+	struct dpmaif_bat_t *cur_bat;
+	struct dpmaif_bat_page_t *cur_page;
+	void *data;
+	struct page *page;
 	unsigned long long data_base_addr;
 	unsigned long offset;
 	int size = L1_CACHE_ALIGN(bat_req->pkt_buf_sz);
@@ -1175,7 +1156,7 @@ static int dpmaif_set_rx_frag_to_skb(struct dpmaif_rx_queue *rxq,
 		ccci_md_get_dev_by_id(dpmaif_ctrl->md_id),
 		cur_page_info->data_phy_addr, cur_page_info->data_len,
 		DMA_FROM_DEVICE);
-	if (page == NULL) {
+	if (!page) {
 		CCCI_ERROR_LOG(-1, TAG, "frag check fail: 0x%x, 0x%x",
 			pkt_inf_t->buffer_id, skb_idx);
 		return DATA_CHECK_FAIL;
@@ -1301,17 +1282,17 @@ static int dpmaif_get_rx_frag(struct dpmaif_rx_queue *rxq,
 static int BAT_cur_bid_check(struct dpmaif_bat_request *bat_req,
 	unsigned int cur_pit, unsigned int skb_idx)
 {
-	#if defined(_97_REORDER_BAT_PAGE_TABLE_)
+#if defined(_97_REORDER_BAT_PAGE_TABLE_)
 	unsigned short bat_rel_rd_cur;
 	/* unsigned long loop = 0; */
 	unsigned long bid_cnt = 0;
-	#endif
+#endif
 	struct sk_buff *skb =
 		((struct dpmaif_bat_skb_t *)bat_req->bat_skb_ptr +
 			skb_idx)->skb;
 	int ret = 0;
 
-	if (unlikely((skb == NULL) ||
+	if (unlikely(!skb ||
 		(skb_idx >= DPMAIF_DL_BAT_ENTRY_SIZE))) {
 		/*dump*/
 		if (bat_req->check_bid_fail_cnt < 0xFFF)
@@ -1668,7 +1649,7 @@ static int dpmaif_get_rx_pkt(struct dpmaif_rx_queue *rxq,
 
 static int ccci_skb_to_list(struct ccci_skb_queue *queue, struct sk_buff *newsk)
 {
-	unsigned long flags;
+	unsigned long flags = 0;
 
 	spin_lock_irqsave(&queue->skb_list.lock, flags);
 	if (queue->skb_list.qlen < queue->max_len) {
@@ -2222,8 +2203,7 @@ static void dpmaif_rxq0_work(struct work_struct *work)
 {
 	struct dpmaif_rx_queue *rxq =
 		container_of(work, struct dpmaif_rx_queue, dpmaif_rxq0_work);
-	struct hif_dpmaif_ctrl *hif_ctrl =
-		(struct hif_dpmaif_ctrl *)ccci_hif_get_by_id(DPMAIF_HIF_ID);
+	struct hif_dpmaif_ctrl *hif_ctrl = dpmaif_ctrl;
 	int ret;
 
 	atomic_set(&rxq->rx_processing, 1);
@@ -2428,8 +2408,12 @@ static unsigned short dpmaif_relase_tx_buffer(unsigned char q_num,
 
 int hif_empty_query(int qno)
 {
-	struct dpmaif_tx_queue *txq = &dpmaif_ctrl->txq[qno];
+	struct dpmaif_tx_queue *txq = NULL;
 
+	if ((qno) < 0 || (qno >= DPMAIF_TXQ_NUM))
+		return 0;
+
+	txq = &dpmaif_ctrl->txq[qno];
 	if (txq == NULL) {
 		CCCI_ERROR_LOG(dpmaif_ctrl->md_id, TAG,
 			"query dpmaif empty fail for NULL txq\n");
@@ -2473,7 +2457,7 @@ static int dpmaif_tx_release(unsigned char q_num, unsigned short budget)
 	dpmaif_ctrl->tx_done_last_count[q_num] = real_rel_cnt;
 #endif
 
-	if (real_rel_cnt < 0 || txq->que_started == false)
+	if (txq->que_started == false)
 		return ERROR_STOP;
 	else {
 		atomic_set(&s_tx_busy_num[q_num], 0);
@@ -2481,6 +2465,27 @@ static int dpmaif_tx_release(unsigned char q_num, unsigned short budget)
 	}
 }
 
+static int dpmaif_wait_resume_done(void)
+{
+	int cnt = 0;
+
+	while (atomic_read(&dpmaif_ctrl->suspend_flag) == 1) {
+		cnt++;
+		if (cnt >= 1600000) {
+			CCCI_NORMAL_LOG(-1, TAG,
+				"[%s] warning: suspend_flag = 1; (cnt: %d)",
+				__func__, cnt);
+			return -1;
+		}
+	}
+
+	if (cnt)
+		CCCI_NORMAL_LOG(-1, TAG,
+			"[%s] suspend_flag = 0; (cnt: %d)",
+			__func__, cnt);
+
+	return 0;
+}
 
 #ifdef USING_TX_DONE_KERNEL_THREAD
 
@@ -2607,6 +2612,11 @@ static void dpmaif_tx_done(struct work_struct *work)
 	int ret;
 	unsigned int L2TISAR0;
 
+	if (dpmaif_wait_resume_done() < 0)
+		queue_delayed_work(hif_ctrl->txq[txq->index].worker,
+				&hif_ctrl->txq[txq->index].dpmaif_tx_work,
+				msecs_to_jiffies(1000 / HZ));
+
 	/* This is used to avoid race condition which may cause KE */
 	if (dpmaif_ctrl->dpmaif_state != HIFDPMAIF_STATE_PWRON) {
 		CCCI_ERROR_LOG(dpmaif_ctrl->md_id, TAG,
@@ -2639,7 +2649,7 @@ static void dpmaif_tx_done(struct work_struct *work)
 	L2TISAR0 = drv_dpmaif_get_ul_isr_event();
 	L2TISAR0 &= (DPMAIF_UL_INT_QDONE_MSK & (1 << (txq->index +
 		UL_INT_DONE_OFFSET)));
-	if (ret == ERROR_STOP) {
+	if (unlikely(ret == ERROR_STOP)) {
 
 	} else if (ret == ONCE_MORE || L2TISAR0) {
 		ret = queue_delayed_work(hif_ctrl->txq[txq->index].worker,
@@ -2829,6 +2839,9 @@ static int dpmaif_tx_send_skb(unsigned char hif_id, int qno,
 	if (!skb)
 		return 0;
 
+	if (dpmaif_wait_resume_done() < 0)
+		return -EBUSY;
+
 	if (skb->mark & UIDMASK) {
 		g_dp_uid_mask_count++;
 		prio_count = 0x1000;
@@ -2877,7 +2890,7 @@ static int dpmaif_tx_send_skb(unsigned char hif_id, int qno,
 
 	info = skb_shinfo(skb);
 
-	if (info->frag_list != NULL)
+	if (info->frag_list)
 		CCCI_NOTICE_LOG(dpmaif_ctrl->md_id, TAG,
 			"attention:q%d skb frag_list not supported!\n",
 			qno);
@@ -3046,6 +3059,7 @@ retry:
 		total_size += data_len;
 #endif
 	}
+
 	/* debug: tx on ccci_channel && HW Q */
 	ccci_channel_update_packet_counter(
 		dpmaif_ctrl->traffic_info.logic_ch_pkt_pre_cnt, &ccci_h);
@@ -3090,7 +3104,6 @@ __EXIT_FUN:
 		txq->drb_rd_idx, txq->drb_rel_rd_idx);
 #endif
 	atomic_set(&txq->tx_processing, 0);
-
 	return ret;
 }
 
@@ -3112,18 +3125,6 @@ static void dpmaif_disable_irq(struct hif_dpmaif_ctrl *hif_ctrl)
 	if (atomic_cmpxchg(&hif_ctrl->dpmaif_irq_enabled, 1, 0) == 1)
 		disable_irq(hif_ctrl->dpmaif_irq_id);
 }
-
-#if 0
-static void dpmaif_disable_irq_nosync(struct hif_dpmaif_ctrl *hif_ctrl)
-{
-	if (atomic_cmpxchg(&hif_ctrl->dpmaif_irq_enabled, 1, 0) == 1)
-		/*
-		 * may be called in isr, so use disable_irq_nosync.
-		 * if use disable_irq in isr, system will hang
-		 */
-		disable_irq_nosync(hif_ctrl->dpmaif_irq_id);
-}
-#endif
 
 static void dpmaif_irq_rx_lenerr_handler(unsigned int rx_int_isr)
 {
@@ -3238,11 +3239,7 @@ static void dpmaif_irq_cb(struct hif_dpmaif_ctrl *hif_ctrl)
 		CCCI_DEBUG_LOG(hif_ctrl->md_id, TAG,
 			"DPMAIF IRQ L2(%x/%x)(%x/%x)!\n",
 			L2TISAR0, L2RISAR0, L2TIMR0, L2RIMR0);
-#if 0 /* def DPMAIF_DEBUG_LOG */
-	CCCI_HISTORY_TAG_LOG(hif_ctrl->md_id, TAG,
-			"DPMAIF IRQ L2(%x/%x)(%x/%x)!\n",
-			L2TISAR0, L2RISAR0, L2TIMR0, L2RIMR0);
-#endif
+
 	/* TX interrupt */
 	if (L2TISAR0) {
 		L2TISAR0 &= ~(L2TIMR0);
@@ -3330,13 +3327,7 @@ static void dpmaif_irq_cb(struct hif_dpmaif_ctrl *hif_ctrl)
 		hif_ctrl->traffic_info.tx_other_isr_cnt[2] = 0;
 		hif_ctrl->traffic_info.tx_other_isr_cnt[3] = 0;
 	}
-#if 0/* def CONFIG_MTK_AEE_FEATURE */
-	if (hif_ctrl->traffic_info.isr_cnt > 20000) {
-		aed_md_exception_api(NULL, 0, NULL,
-			0, "DPMAIF isr > 20000\n",
-			DB_OPT_DEFAULT);
-	}
-#endif
+
 #endif
 
 }
@@ -3382,7 +3373,6 @@ void mtk_ccci_affinity_rta(u32 irq_cpus, u32 push_cpus, int cpu_nr)
 }
 
 #endif
-
 /* =======================================================
  *
  * Descriptions: State part start(1/3): init(RX) -- 1.1.2 rx sw init
@@ -3420,7 +3410,7 @@ static int dpmaif_bat_init(struct dpmaif_bat_request *bat_req,
 
 	bat_req->bat_skb_ptr = kzalloc((bat_req->skb_pkt_cnt *
 		sw_buf_size), GFP_KERNEL);
-	if (bat_req->bat_base == NULL || bat_req->bat_skb_ptr == NULL) {
+	if (!bat_req->bat_base || !bat_req->bat_skb_ptr) {
 		CCCI_ERROR_LOG(-1, TAG, "bat request fail\n");
 		return LOW_MEMORY_BAT;
 	}
@@ -3452,7 +3442,7 @@ static int dpmaif_rx_buf_init(struct dpmaif_rx_queue *rxq)
 	CCCI_HISTORY_LOG(-1, TAG, "pit dma_pool_alloc\n");
 #endif
 #endif
-	if (rxq->pit_base == NULL) {
+	if (!rxq->pit_base) {
 		CCCI_ERROR_LOG(-1, TAG, "pit request fail\n");
 		return LOW_MEMORY_PIT;
 	}
@@ -3652,7 +3642,7 @@ static int dpmaif_tx_buf_init(struct dpmaif_tx_queue *txq)
 #endif
 #endif
 
-	if (txq->drb_base == NULL) {
+	if (!txq->drb_base) {
 		CCCI_ERROR_LOG(-1, TAG, "drb request fail\n");
 		return LOW_MEMORY_DRB;
 	}
@@ -3661,7 +3651,7 @@ static int dpmaif_tx_buf_init(struct dpmaif_tx_queue *txq)
 	txq->drb_skb_base =
 		kzalloc((txq->drb_size_cnt * sizeof(struct dpmaif_drb_skb)),
 				GFP_KERNEL);
-	if (txq->drb_skb_base == NULL) {
+	if (!txq->drb_skb_base) {
 		CCCI_ERROR_LOG(-1, TAG, "drb skb buffer request fail\n");
 		return LOW_MEMORY_DRB;
 	}
@@ -3779,13 +3769,6 @@ int dpmaif_late_init(unsigned char hif_id)
 			dpmaif_ctrl->dpmaif_irq_id, ret);
 		return ret;
 	}
-#ifdef MT6297
-	ret = irq_set_irq_wake(dpmaif_ctrl->dpmaif_irq_id, 1);
-	if (ret)
-		CCCI_ERROR_LOG(dpmaif_ctrl->md_id, TAG,
-			"irq_set_irq_wake dpmaif irq(%d) error %d\n",
-			dpmaif_ctrl->dpmaif_irq_id, ret);
-#endif
 	atomic_set(&dpmaif_ctrl->dpmaif_irq_enabled, 1); /* init */
 	dpmaif_disable_irq(dpmaif_ctrl);
 
@@ -3811,9 +3794,7 @@ int dpmaif_late_init(unsigned char hif_id)
 	for (i = 0; i < DPMAIF_RXQ_NUM; i++) {
 		rx_q = &dpmaif_ctrl->rxq[i];
 		rx_q->index = i;
-		ret = dpmaif_rxq_init(rx_q);
-		if (ret < 0)
-			return ret;
+		dpmaif_rxq_init(rx_q);
 		rx_q->skb_idx = -1;
 	}
 
@@ -3829,16 +3810,17 @@ int dpmaif_late_init(unsigned char hif_id)
 	for (i = 0; i < DPMAIF_TXQ_NUM; i++) {
 		tx_q = &dpmaif_ctrl->txq[i];
 		tx_q->index = i;
-		ret = dpmaif_txq_init(tx_q);
-		if (ret < 0)
-			return ret;
+		dpmaif_txq_init(tx_q);
 	}
 
 	/* wakeup source init */
-	reg_val = ccci_read32(infra_ao_base, INFRA_DPMAIF_CTRL_REG);
+	reg_val =
+		regmap_read(dpmaif_ctrl->plat_val.infra_ao_base,
+		INFRA_DPMAIF_CTRL_REG, &reg_val);
 	reg_val |= DPMAIF_IP_BUSY_MASK;
 	reg_val &= ~(1 << 13); /* MD to AP wakeup event */
-	ccci_write32(infra_ao_base, INFRA_DPMAIF_CTRL_REG, reg_val);
+	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
+		INFRA_DPMAIF_CTRL_REG, reg_val);
 
 #ifdef DPMAIF_DEBUG_LOG
 	CCCI_HISTORY_TAG_LOG(-1, TAG, "dpmaif:%s end\n", __func__);
@@ -3854,9 +3836,28 @@ int dpmaif_late_init(unsigned char hif_id)
  *
  * ========================================================
  */
-void __weak ccci_set_clk_by_id(int idx, unsigned int on)
+void ccci_hif_dpmaif_set_clk(unsigned int on)
 {
-	CCCI_ERROR_LOG(-1, TAG, "%s: not defined!\n", __func__);
+	int ret = 0;
+
+	if (!dpmaif_ctrl->clk_ref0)
+		return;
+	else if (on) {
+		ret = clk_prepare_enable(dpmaif_ctrl->clk_ref0);
+		if (ret)
+			CCCI_ERROR_LOG(-1, TAG, "%s_0: on=%d,ret=%d\n",
+				__func__, on, ret);
+		if (dpmaif_ctrl->clk_ref1) {
+			ret = clk_prepare_enable(dpmaif_ctrl->clk_ref1);
+			if (ret)
+				CCCI_ERROR_LOG(-1, TAG, "%s_1: on=%d,ret=%d\n",
+					__func__, on, ret);
+		}
+	} else {
+		clk_disable_unprepare(dpmaif_ctrl->clk_ref0);
+		if (dpmaif_ctrl->clk_ref1)
+			clk_disable_unprepare(dpmaif_ctrl->clk_ref1);
+	}
 }
 
 int dpmaif_start(unsigned char hif_id)
@@ -3879,18 +3880,18 @@ int dpmaif_start(unsigned char hif_id)
 	CCCI_HISTORY_TAG_LOG(-1, TAG, "dpmaif:start\n");
 #endif
 	/* cg set */
-	ccci_set_clk_by_id(1, 1);
+	ccci_hif_dpmaif_set_clk(1);
+
 #ifdef MT6297
-
-	ccci_set_clk_by_id(2, 1);
-
 	reg_value = ccci_read32(infra_ao_mem_base, 0);
 	reg_value |= INFRA_PROT_DPMAIF_BIT;
 	ccci_write32(infra_ao_mem_base, 0, reg_value);
 	CCCI_REPEAT_LOG(-1, TAG, "%s:clr prot:0x%x\n", __func__, reg_value);
 
 	drv_dpmaif_common_hw_init();
+#endif
 
+#ifdef MT6297
 	ret = drv_dpmaif_intr_hw_init();
 	if (ret < 0) {
 #if defined(CONFIG_MTK_AEE_FEATURE)
@@ -3939,7 +3940,8 @@ int dpmaif_start(unsigned char hif_id)
 #ifdef HW_FRG_FEATURE_ENABLE
 		ret = drv_dpmaif_dl_add_frg_bat_cnt(i,
 			(rxq->bat_frag.bat_size_cnt - 1));
-		if (ret < 0) {
+		if (ret) {
+			CCCI_HISTORY_LOG(-1, TAG, "add_frg_bat_cnt fail\n");
 #if defined(CONFIG_MTK_AEE_FEATURE)
 			aee_kernel_warning("ccci",
 				"add frag failed after dl enable\n");
@@ -3949,7 +3951,8 @@ int dpmaif_start(unsigned char hif_id)
 #endif
 		ret = drv_dpmaif_dl_add_bat_cnt(i,
 				(rxq->bat_req.bat_size_cnt - 1));
-		if (ret < 0) {
+		if (ret) {
+			CCCI_HISTORY_LOG(-1, TAG, "add_bat_cnt fail\n");
 #if defined(CONFIG_MTK_AEE_FEATURE)
 			aee_kernel_warning("ccci",
 				"dpmaif start failed to add bat\n");
@@ -4181,7 +4184,7 @@ static int dpmaif_stop_rxq(struct dpmaif_rx_queue *rxq)
 #endif
 	int j, cnt;
 
-	if (rxq->pit_base == NULL || rxq->bat_req.bat_base == NULL)
+	if (!rxq->pit_base || !rxq->bat_req.bat_base)
 		return -1;
 
 	/* flush work */
@@ -4212,7 +4215,7 @@ static int dpmaif_stop_rxq(struct dpmaif_rx_queue *rxq)
 		cur_skb = ((struct dpmaif_bat_skb_t *)rxq->bat_req.bat_skb_ptr
 			+ j);
 		skb = cur_skb->skb;
-		if (skb != NULL) {
+		if (skb) {
 			/* rx unmapping */
 			dma_unmap_single(
 				ccci_md_get_dev_by_id(dpmaif_ctrl->md_id),
@@ -4227,7 +4230,7 @@ static int dpmaif_stop_rxq(struct dpmaif_rx_queue *rxq)
 		cur_page = ((struct dpmaif_bat_page_t *)
 			rxq->bat_frag.bat_skb_ptr + j);
 		page = cur_page->page;
-		if (page != NULL) {
+		if (page) {
 			/* rx unmapping */
 			dma_unmap_page(
 				ccci_md_get_dev_by_id(dpmaif_ctrl->md_id),
@@ -4259,7 +4262,7 @@ static int dpmaif_stop_rxq(struct dpmaif_rx_queue *rxq)
 
 int dpmaif_stop_rx_sw(unsigned char hif_id)
 {
-	struct dpmaif_rx_queue *rxq = NULL;
+	struct dpmaif_rx_queue *rxq;
 	int i;
 
 	/* rx rx clear */
@@ -4272,7 +4275,7 @@ int dpmaif_stop_rx_sw(unsigned char hif_id)
 
 int dpmaif_stop_tx_sw(unsigned char hif_id)
 {
-	struct dpmaif_tx_queue *txq = NULL;
+	struct dpmaif_tx_queue *txq;
 	int i;
 
 	/*flush and release UL descriptor*/
@@ -4286,30 +4289,34 @@ int dpmaif_stop_tx_sw(unsigned char hif_id)
 
 void dpmaif_hw_reset(unsigned char md_id)
 {
-	unsigned int reg_value;
+	unsigned int reg_value = 0;
 #ifndef MT6297
 	int count = 0;
 #endif
 
 	/* pre- DPMAIF HW reset: bus-protect */
 #ifdef MT6297
-	reg_value = ccci_read32(infra_ao_mem_base, 0);
+	regmap_read(dpmaif_ctrl->plat_val.infra_ao_base, 0, &reg_value);
 	reg_value &= ~INFRA_PROT_DPMAIF_BIT;
-	ccci_write32(infra_ao_mem_base, 0, reg_value);
+	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
+		0,reg_value);
 	CCCI_REPEAT_LOG(md_id, TAG, "%s:set prot:0x%x\n", __func__, reg_value);
 #else
-	ccci_write32(infra_ao_base, INFRA_TOPAXI_PROTECTEN_1_SET,
+	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
+		INFRA_TOPAXI_PROTECTEN_1_SET,
 		DPMAIF_SLEEP_PROTECT_CTRL);
 
-	while ((ccci_read32(infra_ao_base,
-		INFRA_TOPAXI_PROTECT_READY_STA1_1)&(1<<4)) != (1 << 4)) {
+	while ((regmap_read(dpmaif_ctrl->plat_val.infra_ao_base,
+		INFRA_TOPAXI_PROTECT_READY_STA1_1, &reg_value)
+		&(1<<4)) != (1 << 4)) {
 		udelay(1);
 		if (++count >= 1000) {
 			CCCI_ERROR_LOG(0, TAG, "DPMAIF pre-reset timeout\n");
 			break;
 		}
 	}
-	reg_value = ccci_read32(infra_ao_base, INFRA_TOPAXI_PROTECTEN_1);
+	reg_value = regmap_read(dpmaif_ctrl->plat_val.infra_ao_base,
+		INFRA_TOPAXI_PROTECTEN_1, &reg_value);
 	CCCI_NORMAL_LOG(md_id, TAG,
 		"infra_topaxi_protecten_1: 0x%x\n", reg_value);
 #endif
@@ -4319,43 +4326,52 @@ void dpmaif_hw_reset(unsigned char md_id)
 #ifdef MT6297
 	reg_value = DPMAIF_AO_RST_MASK;/* so only this bit effective */
 #else
-	reg_value = ccci_read32(infra_ao_base, INFRA_RST0_REG_AO);
+	reg_value = regmap_read(dpmaif_ctrl->plat_val.infra_ao_base,
+		INFRA_RST0_REG_AO, &reg_value);
 	reg_value &= ~(DPMAIF_AO_RST_MASK); /* the bits in reg is WO, */
 	reg_value |= (DPMAIF_AO_RST_MASK);/* so only this bit effective */
 #endif
-	ccci_write32(infra_ao_base, INFRA_RST0_REG_AO, reg_value);
+	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
+		INFRA_RST0_REG_AO, reg_value);
 	CCCI_BOOTUP_LOG(md_id, TAG, "%s:clear reset\n", __func__);
 	/* reset dpmaif clr */
 #ifndef MT6297
-	reg_value = ccci_read32(infra_ao_base, INFRA_RST1_REG_AO);
+	reg_value = regmap_read(dpmaif_ctrl->plat_val.infra_ao_base,
+		INFRA_RST1_REG_AO, &reg_value);
 	reg_value &= ~(DPMAIF_AO_RST_MASK);/* read no use, maybe a time delay */
 	reg_value |= (DPMAIF_AO_RST_MASK);
 #endif
-	ccci_write32(infra_ao_base, INFRA_RST1_REG_AO, reg_value);
+	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
+		INFRA_RST1_REG_AO, reg_value);
 	CCCI_BOOTUP_LOG(md_id, TAG, "%s:done\n", __func__);
 
 	/* reset dpmaif hw: PD Domain */
 #ifdef MT6297
 	reg_value = DPMAIF_PD_RST_MASK;
 #else
-	reg_value = ccci_read32(infra_ao_base, INFRA_RST0_REG_PD);
+	reg_value = regmap_read(dpmaif_ctrl->plat_val.infra_ao_base,
+	INFRA_RST0_REG_PD, &reg_value);
 	reg_value &= ~(DPMAIF_PD_RST_MASK);
 	reg_value |= (DPMAIF_PD_RST_MASK);
 #endif
-	ccci_write32(infra_ao_base, INFRA_RST0_REG_PD, reg_value);
+	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
+		INFRA_RST0_REG_PD, reg_value);
 	CCCI_BOOTUP_LOG(md_id, TAG, "%s:clear reset\n", __func__);
 	/* reset dpmaif clr */
 #ifndef MT6297
-	reg_value = ccci_read32(infra_ao_base, INFRA_RST1_REG_PD);
+	reg_value = regmap_read(dpmaif_ctrl->plat_val.infra_ao_base,
+		INFRA_RST1_REG_PD, &reg_value);
 	reg_value &= ~(DPMAIF_PD_RST_MASK);
 	reg_value |= (DPMAIF_PD_RST_MASK);
 #endif
-	ccci_write32(infra_ao_base, INFRA_RST1_REG_PD, reg_value);
+	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
+		INFRA_RST1_REG_PD, reg_value);
 	CCCI_DEBUG_LOG(md_id, TAG, "%s:done\n", __func__);
 
 #ifndef MT6297
 	/* post- DPMAIF HW reset: bus-protect */
-	ccci_write32(infra_ao_base, INFRA_TOPAXI_PROTECTEN_1_CLR,
+	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
+		INFRA_TOPAXI_PROTECTEN_1_CLR,
 		DPMAIF_SLEEP_PROTECT_CTRL);
 #endif
 }
@@ -4384,18 +4400,18 @@ int dpmaif_stop(unsigned char hif_id)
 	/* stop debug mechnism */
 	del_timer(&dpmaif_ctrl->traffic_monitor);
 
-	#ifdef MT6297
-	/* todo: CG set */
-	ccci_set_clk_by_id(1, 0);
-	ccci_set_clk_by_id(2, 0);
+#ifdef MT6297
+	/* CG set */
+	ccci_hif_dpmaif_set_clk(0);
 	/* 3. todo: reset IP */
 	dpmaif_hw_reset(dpmaif_ctrl->md_id);
-	#else
+#else
 	/* 3. todo: reset IP */
 	dpmaif_hw_reset(dpmaif_ctrl->md_id);
-	/* todo: CG set */
-	ccci_set_clk_by_id(1, 0);
-	#endif
+	/* CG set */
+	ccci_hif_dpmaif_set_clk(0);
+#endif
+
 #ifdef DPMAIF_DEBUG_LOG
 	CCCI_HISTORY_LOG(-1, TAG, "dpmaif:stop end\n");
 #endif
@@ -4490,6 +4506,15 @@ static int dpmaif_resume(unsigned char hif_id)
 	}
 	return 0;
 }
+
+static void dpmaif_sysresume(void)
+{
+	if ((dpmaif_ctrl->dpmaif_state != HIFDPMAIF_STATE_PWRON) &&
+		(dpmaif_ctrl->dpmaif_state != HIFDPMAIF_STATE_EXCEPTION))
+		return;
+
+	dpmaif_resume(dpmaif_ctrl->hif_id);
+}
 /* =======================================================
  *
  * Descriptions: State part start(6/6): Suspend -- 6.
@@ -4507,6 +4532,34 @@ static int dpmaif_suspend(unsigned char hif_id __maybe_unused)
 	return 0;
 }
 
+static int dpmaif_syssuspend(void)
+{
+	return dpmaif_suspend(dpmaif_ctrl->hif_id);
+}
+
+static int dpmaif_debug(unsigned char hif_id,
+		enum ccci_hif_debug_flg flag, int *para)
+{
+	int ret = -1;
+
+	switch (flag) {
+	case CCCI_HIF_DEBUG_SET_WAKEUP:
+		ret = atomic_set(&dpmaif_ctrl->wakeup_src, para[0]);
+		break;
+	default:
+		break;
+	}
+	return ret;
+}
+
+static int dpmaif_pre_stop(unsigned char hif_id)
+{
+	if (hif_id != DPMAIF_HIF_ID)
+		return -1;
+	dpmaif_stop_hw();
+	return 0;
+}
+
 static struct ccci_hif_ops ccci_hif_dpmaif_ops = {
 	.send_skb = &dpmaif_tx_send_skb,
 	.give_more = &dpmaif_give_more,
@@ -4514,8 +4567,19 @@ static struct ccci_hif_ops ccci_hif_dpmaif_ops = {
 	.stop_queue = &dpmaif_stop_queue,
 	.start_queue = &dpmaif_start_queue,
 	.dump_status = &dpmaif_dump_status,
-	.suspend = &dpmaif_suspend,
-	.resume = &dpmaif_resume,
+	/* .suspend = &dpmaif_suspend, */
+	/* .resume = &dpmaif_resume, */
+
+	/* .init = &ccci_dpmaif_hif_init, */
+	.start = &dpmaif_start,
+	.pre_stop = &dpmaif_pre_stop,
+	.stop = &dpmaif_stop,
+	.debug = &dpmaif_debug,
+};
+
+static struct syscore_ops dpmaif_sysops = {
+	.suspend = dpmaif_syssuspend,
+	.resume = dpmaif_sysresume,
 };
 
 /* =======================================================
@@ -4524,35 +4588,80 @@ static struct ccci_hif_ops ccci_hif_dpmaif_ops = {
  *
  * ========================================================
  */
-
-int ccci_dpmaif_hif_init(unsigned char hif_id, unsigned char md_id)
+static u64 dpmaif_dmamask = DMA_BIT_MASK(36);
+int ccci_dpmaif_hif_init(struct device *dev)
 {
 	struct device_node *node = NULL;
-	struct hif_dpmaif_ctrl *hif_ctrl;
+	struct device_node *node_md = NULL;
+	struct hif_dpmaif_ctrl *hif_ctrl = NULL;
 	int ret = 0;
+	unsigned char md_id = 0;
 
+	CCCI_HISTORY_TAG_LOG(-1, TAG,
+			"%s: probe initl\n", __func__);
+	/* get Hif hw information: register etc. */
+	if (!dev) {
+		CCCI_ERROR_LOG(-1, TAG, "No dpmaif driver in dtsi\n");
+		ret = -3;
+		goto DPMAIF_INIT_FAIL;
+	}
+	node = dev->of_node;
+	if (!node) {
+		CCCI_ERROR_LOG(-1, TAG, "No dpmaif driver in dtsi\n");
+		ret = -2;
+		goto DPMAIF_INIT_FAIL;
+	}
 	/* init local struct pointer */
 	hif_ctrl = kzalloc(sizeof(struct hif_dpmaif_ctrl), GFP_KERNEL);
-	if (hif_ctrl == NULL) {
+	if (!hif_ctrl) {
 		CCCI_ERROR_LOG(-1, TAG,
 			"%s:alloc hif_ctrl fail\n", __func__);
 		ret = -1;
 		goto DPMAIF_INIT_FAIL;
 	}
-
-	/* get Hif hw information: register etc. */
-	node = of_find_compatible_node(NULL, NULL, "mediatek,dpmaif");
-	if (node == NULL) {
-		CCCI_ERROR_LOG(-1, TAG, "No dpmaif driver in dtsi\n");
-		ret = -2;
-		goto DPMAIF_INIT_FAIL;
-	}
 	memset(hif_ctrl, 0, sizeof(struct hif_dpmaif_ctrl));
 
-	hif_ctrl->md_id = md_id;
-	hif_ctrl->hif_id = hif_id;
+	hif_ctrl->md_id = md_id; /* maybe can get from dtsi or phase-out. */
+	hif_ctrl->hif_id = DPMAIF_HIF_ID;
 	dpmaif_ctrl = hif_ctrl;
+	atomic_set(&dpmaif_ctrl->suspend_flag, -1);
 
+	node_md = of_find_compatible_node(NULL, NULL,
+		"mediatek,mddriver");
+	of_property_read_u32(node_md,
+			"mediatek,md_generation",
+			&dpmaif_ctrl->plat_val.md_gen);
+
+	/* */
+	dpmaif_ctrl->plat_val.infra_ao_base =
+		syscon_regmap_lookup_by_phandle(node_md,
+		"ccci-infracfg");
+
+	hif_ctrl->clk_ref0= devm_clk_get(dev, "infra-dpmaif-clk");
+	if (IS_ERR(hif_ctrl->clk_ref0)) {
+		CCCI_ERROR_LOG(md_id, TAG,
+			 "dpmaif get infra-dpmaif-clk failed\n");
+		hif_ctrl->clk_ref0 = NULL;
+		ret = -1;
+		goto DPMAIF_INIT_FAIL;
+	}
+
+#ifdef MT6297
+		hif_ctrl->clk_ref1 = devm_clk_get(dev, "infra-dpmaif-blk-clk");
+		if (IS_ERR(hif_ctrl->clk_ref1)) {
+			CCCI_ERROR_LOG(md_id, TAG,
+				 "dpmaif get infra-dpmaif-blk-clk failed\n");
+			hif_ctrl->clk_ref1 = NULL;
+			ret = -6;
+			goto DPMAIF_INIT_FAIL;
+		}
+#endif
+
+	if (!dpmaif_ctrl->plat_val.infra_ao_base) {
+		CCCI_ERROR_LOG(-1, TAG, "No infra_ao register in dtsi\n");
+		ret = -4;
+		goto DPMAIF_INIT_FAIL;
+	}
 #ifndef MT6297
 	/* HW: register, interrupt id,  */
 	hif_ctrl->dpmaif_ao_ul_base = of_iomap(node, 0);
@@ -4628,19 +4737,27 @@ int ccci_dpmaif_hif_init(unsigned char hif_id, unsigned char md_id)
 	hif_ctrl->dpmaif_irq_flags = IRQF_TRIGGER_NONE;
 	CCCI_DEBUG_LOG(md_id, TAG, "dpmaif_irq_id:%d\n",
 			hif_ctrl->dpmaif_irq_id);
+	dev->dma_mask = &dpmaif_dmamask;
+	dev->coherent_dma_mask = dpmaif_dmamask;
+	/* hook up to device */
+	dev->platform_data = hif_ctrl; /* maybe no need */
+
 	/* other ops: tx, dump */
 	hif_ctrl->ops = &ccci_hif_dpmaif_ops;
 
 	/* set debug related */
 #if DPMAIF_TRAFFIC_MONITOR_INTERVAL
-	init_timer(&hif_ctrl->traffic_monitor);
-	hif_ctrl->traffic_monitor.function = dpmaif_traffic_monitor_func;
-	hif_ctrl->traffic_monitor.data = (unsigned long)hif_ctrl;
+	timer_setup(&hif_ctrl->traffic_monitor, dpmaif_traffic_monitor_func, 0);
 #endif
-	ccci_hif[hif_id] = (void *)hif_ctrl;
+	ccci_hif_register(DPMAIF_HIF_ID, (void *)dpmaif_ctrl,
+		&ccci_hif_dpmaif_ops);
+	register_syscore_ops(&dpmaif_sysops);
+
 #ifdef MT6297
 	mtk_ccci_speed_monitor_init();
 #endif
+	atomic_set(&dpmaif_ctrl->suspend_flag, 0);
+
 	return 0;
 
 DPMAIF_INIT_FAIL:
@@ -4649,4 +4766,100 @@ DPMAIF_INIT_FAIL:
 
 	return ret;
 }
+
+static unsigned int g_suspend_cnt;
+static unsigned int g_resume_cnt;
+
+int dpmaif_suspend_noirq(struct device *dev)
+{
+	g_suspend_cnt++;
+
+	if ((!dpmaif_ctrl) || (atomic_read(&dpmaif_ctrl->suspend_flag) < 0))
+		return 0;
+
+	CCCI_NORMAL_LOG(-1, TAG, "[%s] suspend_cnt: %u\n", __func__, g_suspend_cnt);
+
+	atomic_set(&dpmaif_ctrl->suspend_flag, 1);
+
+	dpmaif_suspend(dpmaif_ctrl->hif_id);
+
+	return 0;
+}
+
+int dpmaif_resume_noirq(struct device *dev)
+{
+	g_resume_cnt++;
+
+	if ((!dpmaif_ctrl) || (atomic_read(&dpmaif_ctrl->suspend_flag) < 0))
+		return 0;
+
+	CCCI_NORMAL_LOG(-1, TAG,
+		"[%s] resume_cnt: %u\n", __func__, g_resume_cnt);
+
+	if (dpmaif_ctrl->dpmaif_state != HIFDPMAIF_STATE_PWRON &&
+		dpmaif_ctrl->dpmaif_state != HIFDPMAIF_STATE_EXCEPTION)
+		CCCI_ERROR_LOG(-1, TAG, "[%s] dpmaif_state: %d\n",
+			__func__, dpmaif_ctrl->dpmaif_state);
+	else
+		dpmaif_resume(dpmaif_ctrl->hif_id);
+
+	atomic_set(&dpmaif_ctrl->suspend_flag, 0);
+
+	return 0;
+}
+
+int ccci_hif_dpmaif_probe(struct platform_device *pdev)
+{
+	int ret;
+
+	ret = ccci_dpmaif_hif_init(&pdev->dev);
+	if (ret < 0) {
+		CCCI_ERROR_LOG(-1, TAG, "ccci dpmaif init fail");
+		return ret;
+	}
+	dpmaif_ctrl->plat_dev = pdev;
+
+	return 0;
+}
+
+
+static const struct of_device_id ccci_dpmaif_of_ids[] = {
+	{.compatible = "mediatek,dpmaif"},
+	{}
+};
+
+static struct platform_driver ccci_hif_dpmaif_driver = {
+
+	.driver = {
+		.name = "ccci_hif_dpmaif",
+		.of_match_table = ccci_dpmaif_of_ids,
+	},
+
+	.probe = ccci_hif_dpmaif_probe,
+};
+
+static int __init ccci_hif_dpmaif_init(void)
+{
+	int ret;
+
+	ret = platform_driver_register(&ccci_hif_dpmaif_driver);
+	if (ret) {
+		CCCI_ERROR_LOG(-1, TAG, "ccci hif_dpmaif driver init fail %d",
+			ret);
+		return ret;
+	}
+	return 0;
+}
+
+static void __exit ccci_hif_dpmaif_exit(void)
+{
+}
+
+module_init(ccci_hif_dpmaif_init);
+module_exit(ccci_hif_dpmaif_exit);
+
+MODULE_AUTHOR("ccci");
+MODULE_DESCRIPTION("ccci hif dpmaif driver");
+MODULE_LICENSE("GPL");
+
 

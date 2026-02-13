@@ -32,8 +32,7 @@
 //------------------------------------------------------------------------------
 // Private helper macro.
 //------------------------------------------------------------------------------
-#define MDDP_CHECK_APP_TYPE(_type) \
-	((_type >= 0 && _type < MDDP_APP_TYPE_CNT) ? (1) : (0))
+#define MDDP_CHECK_APP_TYPE(_type) ((_type < MDDP_APP_TYPE_CNT) ? (1) : (0))
 
 //------------------------------------------------------------------------------
 // Private functions.
@@ -118,7 +117,9 @@ int32_t mddp_on_enable(enum mddp_app_type_e in_type)
 	for (idx = 0; idx < MDDP_MOD_CNT; idx++) {
 		type = mddp_sm_module_list_s[idx];
 		app = mddp_get_app_inst(type);
+		mddp_sm_wait_pre(app);
 		mddp_sm_on_event(app, MDDP_EVT_FUNC_ENABLE);
+		mddp_sm_wait(app, MDDP_EVT_FUNC_ENABLE);
 	}
 
 	return 0;
@@ -139,7 +140,9 @@ int32_t mddp_on_disable(enum mddp_app_type_e in_type)
 	for (idx = 0; idx < MDDP_MOD_CNT; idx++) {
 		type = mddp_sm_module_list_s[idx];
 		app = mddp_get_app_inst(type);
+		mddp_sm_wait_pre(app);
 		mddp_sm_on_event(app, MDDP_EVT_FUNC_DISABLE);
+		mddp_sm_wait(app, MDDP_EVT_FUNC_DISABLE);
 	}
 
 	return 0;
@@ -179,7 +182,9 @@ int32_t mddp_on_activate(enum mddp_app_type_e type,
 			__func__, type, app,
 			app->ap_cfg.ul_dev_name, app->ap_cfg.dl_dev_name);
 
+	mddp_sm_wait_pre(app);
 	mddp_sm_on_event(app, MDDP_EVT_FUNC_ACT);
+	mddp_sm_wait(app, MDDP_EVT_FUNC_ACT);
 	mddp_u_set_wan_iface(ul_dev_name);
 
 	return 0;
@@ -202,7 +207,9 @@ int32_t mddp_on_deactivate(enum mddp_app_type_e type)
 	/*
 	 * MDDP DEACTIVATE command.
 	 */
+	mddp_sm_wait_pre(app);
 	mddp_sm_on_event(app, MDDP_EVT_FUNC_DEACT);
+	mddp_sm_wait(app, MDDP_EVT_FUNC_DEACT);
 
 	return 0;
 }
@@ -274,6 +281,29 @@ int32_t mddp_on_set_ct_value(
 //------------------------------------------------------------------------------
 // Kernel functions.
 //------------------------------------------------------------------------------
+static int mddp_init_steps;
+static void mddp_exit(void)
+{
+	synchronize_net();
+
+	switch (mddp_init_steps) {
+	case 4:
+		mddp_filter_uninit();
+		/* fallthrough */
+	case 3:
+		mddp_dev_uninit();
+		/* fallthrough */
+	case 2:
+		mddp_ipc_uninit();
+		/* fallthrough */
+	case 1:
+		mddp_sm_uninit();
+		/* fallthrough */
+	default:
+		break;
+	}
+}
+
 static int __init mddp_init(void)
 {
 	int32_t         ret = 0;
@@ -282,38 +312,27 @@ static int __init mddp_init(void)
 	if (ret < 0)
 		goto _init_fail;
 
+	mddp_init_steps++;
 	ret = mddp_ipc_init();
 	if (ret < 0)
-		goto _init_fail2;
+		goto _init_fail;
 
+	mddp_init_steps++;
 	ret = mddp_dev_init();
 	if (ret < 0)
-		goto _init_fail3;
+		goto _init_fail;
 
+	mddp_init_steps++;
 	ret = mddp_filter_init();
 	if (ret < 0)
-		goto _init_fail4;
+		goto _init_fail;
 
+	mddp_init_steps++;
 	return 0;
 
-_init_fail4:
-	mddp_dev_uninit();
-_init_fail3:
-	mddp_ipc_uninit();
-_init_fail2:
-	mddp_sm_uninit();
 _init_fail:
-	return ret;
-}
-
-static void __exit mddp_exit(void)
-{
-	synchronize_net();
-
-	mddp_filter_uninit();
-	mddp_dev_uninit();
-	mddp_ipc_uninit();
-	mddp_sm_uninit();
+	mddp_exit();
+	return 0;
 }
 module_init(mddp_init);
 module_exit(mddp_exit);

@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- */
+ * Copyright (c) 2021 MediaTek Inc.
+*/
 
 /*
  *
@@ -65,8 +57,8 @@
 #include <linux/of_address.h>
 #include <linux/reboot.h>
 
-#include <mt-plat/charger_type.h>
-#include <mt-plat/mtk_battery.h>
+#include <mt-plat/v1/charger_type.h>
+#include <mt-plat/v1/mtk_battery.h>
 #include <mt-plat/mtk_boot.h>
 #include <pmic.h>
 #include <mtk_gauge_time_service.h>
@@ -78,6 +70,12 @@ static struct charger_manager *pinfo;
 static struct list_head consumer_head = LIST_HEAD_INIT(consumer_head);
 static DEFINE_MUTEX(consumer_mutex);
 
+struct tag_bootmode {
+	u32 size;
+	u32 tag;
+	u32 bootmode;
+	u32 boottype;
+};
 
 bool mtk_is_TA_support_pd_pps(struct charger_manager *pinfo)
 {
@@ -219,8 +217,8 @@ void _wake_up_charger(struct charger_manager *info)
 		return;
 
 	spin_lock_irqsave(&info->slock, flags);
-	if (!info->charger_wakelock.active)
-		__pm_stay_awake(&info->charger_wakelock);
+	if (!info->charger_wakelock->active)
+		__pm_stay_awake(info->charger_wakelock);
 	spin_unlock_irqrestore(&info->slock, flags);
 	info->charger_thread_timeout = true;
 	wake_up_interruptible(&info->wait_que);
@@ -1566,10 +1564,32 @@ static void mtk_battery_notify_check(struct charger_manager *info)
 
 static void check_battery_exist(struct charger_manager *info)
 {
+	struct device *dev = NULL;
+	struct device_node *boot_node = NULL;
+	struct tag_bootmode *tag = NULL;
 	unsigned int i = 0;
 	int count = 0;
-	int boot_mode = get_boot_mode();
-
+	int boot_mode = 11;//UNKNOWN_BOOT
+// workaround for mt6768 
+	//int boot_mode = get_boot_mode();
+	dev = &(info->pdev->dev);
+	if (dev != NULL){
+		boot_node = of_parse_phandle(dev->of_node, "bootmode", 0);
+		if (!boot_node){
+			chr_err("%s: failed to get boot mode phandle\n", __func__);
+			return;
+		}
+		else {
+			tag = (struct tag_bootmode *)of_get_property(boot_node,
+								"atag,boot", NULL);
+			if (!tag){
+				chr_err("%s: failed to get atag,boot\n", __func__);
+				return;
+			}
+			else
+				boot_mode = tag->bootmode;
+		}
+	}
 	if (is_disable_charger())
 		return;
 
@@ -1779,8 +1799,29 @@ stop_charging:
 
 static void kpoc_power_off_check(struct charger_manager *info)
 {
-	unsigned int boot_mode = get_boot_mode();
 	int vbus = 0;
+	struct device *dev = NULL;
+	struct device_node *boot_node = NULL;
+	struct tag_bootmode *tag = NULL;
+	int boot_mode = 11;//UNKNOWN_BOOT
+// workaround for mt6768 
+	//int boot_mode = get_boot_mode();
+	dev = &(info->pdev->dev);
+	if (dev != NULL){
+		boot_node = of_parse_phandle(dev->of_node, "bootmode", 0);
+		if (!boot_node){
+			chr_err("%s: failed to get boot mode phandle\n", __func__);
+		}
+		else {
+			tag = (struct tag_bootmode *)of_get_property(boot_node,
+								"atag,boot", NULL);
+			if (!tag){
+				chr_err("%s: failed to get atag,boot\n", __func__);
+			}
+			else
+				boot_mode = tag->bootmode;
+		}
+	}
 
 	if (boot_mode == KERNEL_POWER_OFF_CHARGING_BOOT
 	    || boot_mode == LOW_POWER_OFF_CHARGING_BOOT) {
@@ -1848,8 +1889,8 @@ static enum alarmtimer_restart
 	} else {
 		chr_err("%s: alarm timer timeout\n", __func__);
 		spin_lock_irqsave(&info->slock, flags);
-		if (!info->charger_wakelock.active)
-			__pm_stay_awake(&info->charger_wakelock);
+		if (!info->charger_wakelock->active)
+			__pm_stay_awake(info->charger_wakelock);
 		spin_unlock_irqrestore(&info->slock, flags);
 	}
 
@@ -1911,8 +1952,8 @@ static int charger_routine_thread(void *arg)
 
 		mutex_lock(&info->charger_lock);
 		spin_lock_irqsave(&info->slock, flags);
-		if (!info->charger_wakelock.active)
-			__pm_stay_awake(&info->charger_wakelock);
+		if (!info->charger_wakelock->active)
+			__pm_stay_awake(info->charger_wakelock);
 		spin_unlock_irqrestore(&info->slock, flags);
 
 		info->charger_thread_timeout = false;
@@ -1948,7 +1989,7 @@ static int charger_routine_thread(void *arg)
 			chr_debug("disable charging\n");
 
 		spin_lock_irqsave(&info->slock, flags);
-		__pm_relax(&info->charger_wakelock);
+		__pm_relax(info->charger_wakelock);
 		spin_unlock_irqrestore(&info->slock, flags);
 		chr_debug("%s end , %d\n",
 			__func__, info->charger_thread_timeout);
@@ -2742,7 +2783,7 @@ static ssize_t show_Pump_Express(struct device *dev,
 			is_ta_detected = 1;
 	}
 
-	if (mtk_is_TA_support_pd_pps(pinfo) == true)
+	if (mtk_is_TA_support_pd_pps(pinfo) == true || pinfo->is_pdc_run == true)
 		is_ta_detected = 1;
 
 	pr_debug("%s: detected = %d, pe20_connect = %d, pe_connect = %d\n",
@@ -3855,16 +3896,37 @@ static int mtk_charger_probe(struct platform_device *pdev)
 	struct netlink_kernel_cfg cfg = {
 		.input = chg_nl_data_handler,
 	};
-	unsigned int boot_mode = get_boot_mode();
-
+	struct device *dev = NULL;
+	struct device_node *boot_node = NULL;
+	struct tag_bootmode *tag = NULL;
+	int boot_mode = 11;//UNKNOWN_BOOT
+	
 	chr_err("%s: starts\n", __func__);
-
+	
+	// workaround for mt6768 
+	//int boot_mode = get_boot_mode();
+	dev = &(pdev->dev);
+	if (dev != NULL){
+		boot_node = of_parse_phandle(dev->of_node, "bootmode", 0);
+		if (!boot_node){
+			chr_err("%s: failed to get boot mode phandle\n", __func__);
+		}
+		else {
+			tag = (struct tag_bootmode *)of_get_property(boot_node,
+								"atag,boot", NULL);
+			if (!tag){
+				chr_err("%s: failed to get atag,boot\n", __func__);
+			}
+			else
+				boot_mode = tag->bootmode;
+		}
+	}
+	
 	info = devm_kzalloc(&pdev->dev, sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
-
 	pinfo = info;
-
+	
 	platform_set_drvdata(pdev, info);
 	info->pdev = pdev;
 	mtk_charger_parse_dt(info, &pdev->dev);
@@ -3877,8 +3939,9 @@ static int mtk_charger_probe(struct platform_device *pdev)
 		info->force_disable_pp[i] = false;
 		info->enable_pp[i] = true;
 	}
+	/*work around for mt6768*/
 	atomic_set(&info->enable_kpoc_shdn, 1);
-	wakeup_source_init(&info->charger_wakelock, "charger suspend wakelock");
+	info->charger_wakelock = wakeup_source_register(NULL, "charger suspend wakelock");
 	spin_lock_init(&info->slock);
 
 	/* init thread */
@@ -3897,7 +3960,7 @@ static int mtk_charger_probe(struct platform_device *pdev)
 	info->sw_jeita.error_recovery_flag = true;
 
 	mtk_charger_init_timer(info);
-
+	info->is_pdc_run = false;
 	kthread_run(charger_routine_thread, info, "charger_thread");
 
 	if (info->chg1_dev != NULL && info->do_event != NULL) {

@@ -1,16 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ * Copyright (c) 2019 MediaTek Inc.
  */
-/*#define pr_fmt(fmt) KBUILD_MODNAME ": %s: " fmt, __func__*/
 #include <linux/kernel.h>
 
 #include "wmt_build_in_adapter.h"
@@ -39,11 +30,6 @@
 #define CONNADP_LOG_INFO    2
 #define CONNADP_LOG_WARN    1
 #define CONNADP_LOG_ERR     0
-
-#if defined(CONFIG_MACH_MT6873)
-#include <clk-mt6873-pg.h>
-#define DUMP_CLOCK_FAIL_CALLBACK 1
-#endif
 
 /*******************************************************************************
  * Connsys adaptation layer logging utility
@@ -96,15 +82,24 @@ static struct wmt_platform_bridge bridge;
 ssize_t conn_dbg_dev_write(struct file *filp, const char __user *buffer,
 				size_t count, loff_t *f_pos)
 {
-	pr_info("%s\n", __func__);
-	if (bridge.debug_cb)
-		return bridge.debug_cb(filp, buffer, count, f_pos);
+	if (bridge.debug_write_cb)
+		return bridge.debug_write_cb(filp, buffer, count, f_pos);
+
+	return 0;
+}
+
+ssize_t conn_dbg_dev_read(struct file *filp, char __user *buffer,
+				size_t count, loff_t *f_pos)
+{
+	if (bridge.debug_read_cb)
+		return bridge.debug_read_cb(filp, buffer, count, f_pos);
 
 	return 0;
 }
 
 const struct file_operations gConnDbgDevFops = {
 	.write = conn_dbg_dev_write,
+	.read = conn_dbg_dev_read,
 };
 
 static int conn_dbg_dev_init(void)
@@ -178,18 +173,6 @@ static int conn_dbg_dev_deinit(void)
 	return 0;
 }
 
-#ifdef DUMP_CLOCK_FAIL_CALLBACK
-static void wmt_clock_debug_dump(enum subsys_id sys)
-{
-	if (sys == SYS_CONN)
-		mtk_wcn_cmb_stub_clock_fail_dump();
-}
-
-static struct pg_callbacks wmt_clk_subsys_handle = {
-	.debug_dump = wmt_clock_debug_dump
-};
-#endif
-
 void wmt_export_platform_bridge_register(struct wmt_platform_bridge *cb)
 {
 	if (unlikely(!cb))
@@ -199,13 +182,10 @@ void wmt_export_platform_bridge_register(struct wmt_platform_bridge *cb)
 	bridge.clock_fail_dump_cb = cb->clock_fail_dump_cb;
 	bridge.conninfra_reg_readable_cb = cb->conninfra_reg_readable_cb;
 	bridge.conninfra_reg_is_bus_hang_cb = cb->conninfra_reg_is_bus_hang_cb;
-	bridge.conninfra_reg_is_bus_hang_no_lock_cb = cb->conninfra_reg_is_bus_hang_no_lock_cb;
-#ifdef DUMP_CLOCK_FAIL_CALLBACK
-	register_pg_callback(&wmt_clk_subsys_handle);
-#endif
 
-	if (cb->debug_cb != NULL) {
-		bridge.debug_cb = cb->debug_cb;
+	if (cb->debug_write_cb != NULL && cb->debug_read_cb != NULL) {
+		bridge.debug_write_cb = cb->debug_write_cb;
+		bridge.debug_read_cb = cb->debug_read_cb;
 		conn_dbg_dev_init();
 	}
 
@@ -215,7 +195,7 @@ EXPORT_SYMBOL(wmt_export_platform_bridge_register);
 
 void wmt_export_platform_bridge_unregister(void)
 {
-	if (bridge.debug_cb)
+	if (bridge.debug_write_cb && bridge.debug_read_cb)
 		conn_dbg_dev_deinit();
 	memset(&bridge, 0, sizeof(struct wmt_platform_bridge));
 	CONNADP_INFO_FUNC("\n");
@@ -275,22 +255,6 @@ int mtk_wcn_conninfra_is_bus_hang(void)
 		return -1;
 	} else
 		return bridge.conninfra_reg_is_bus_hang_cb();
-}
-
-int mtk_wcn_conninfra_conn_bus_dump(void)
-{
-	static DEFINE_RATELIMIT_STATE(_rs, 5*HZ, 1);
-	int ret = 0;
-
-	if (unlikely(!bridge.conninfra_reg_is_bus_hang_no_lock_cb)) {
-		if (__ratelimit(&_rs))
-			CONNADP_WARN_FUNC("is_bus_hang_no_lock not registered\n");
-		ret = -1;
-	} else {
-		ret = bridge.conninfra_reg_is_bus_hang_no_lock_cb();
-	}
-
-	return ret;
 }
 
 /*******************************************************************************
@@ -353,15 +317,18 @@ static irqreturn_t mtk_wcn_cmb_sdio_eirq_handler_stub(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-void mtk_wcn_cmb_sdio_request_eirq_by_wmt(void)
+static void mtk_wcn_cmb_sdio_request_eirq(msdc_sdio_irq_handler_t irq_handler,
+					  void *data)
 {
 #ifdef CONFIG_OF
-	int ret = -EINVAL;
 	struct device_node *node;
+	int ret = -EINVAL;
 
 	CONNADP_INFO_FUNC("enter\n");
 	_mtk_wcn_sdio_irq_flag_set(0);
 	atomic_set(&irq_enable_flag, 1);
+	mtk_wcn_cmb_sdio_eirq_data = data;
+	mtk_wcn_cmb_sdio_eirq_handler = irq_handler;
 
 	node = (struct device_node *)of_find_compatible_node(NULL, NULL,
 					"mediatek,connectivity-combo");
@@ -377,20 +344,6 @@ void mtk_wcn_cmb_sdio_request_eirq_by_wmt(void)
 			mtk_wcn_cmb_sdio_disable_eirq();/*state:power off*/
 	} else
 		CONNADP_WARN_FUNC("can't find connectivity compatible node\n");
-
-	CONNADP_INFO_FUNC("exit\n");
-	return;
-#endif
-}
-EXPORT_SYMBOL(mtk_wcn_cmb_sdio_request_eirq_by_wmt);
-
-static void mtk_wcn_cmb_sdio_request_eirq(msdc_sdio_irq_handler_t irq_handler,
-					  void *data)
-{
-#ifdef CONFIG_OF
-	CONNADP_INFO_FUNC("enter\n");
-	mtk_wcn_cmb_sdio_eirq_data = data;
-	mtk_wcn_cmb_sdio_eirq_handler = irq_handler;
 
 	CONNADP_INFO_FUNC("exit\n");
 #else
@@ -412,7 +365,7 @@ static void mtk_wcn_cmb_sdio_enable_eirq(void)
 		CONNADP_DBG_FUNC("wifi eint has been enabled\n");
 	else {
 		atomic_set(&irq_enable_flag, 1);
-		if (wifi_irq != 0xffffffff) {
+		if (wifi_irq != 0xfffffff) {
 			enable_irq(wifi_irq);
 			CONNADP_DBG_FUNC(" enable WIFI EINT %d!\n", wifi_irq);
 		}
@@ -424,7 +377,7 @@ static void mtk_wcn_cmb_sdio_disable_eirq(void)
 	if (!atomic_read(&irq_enable_flag))
 		CONNADP_DBG_FUNC("wifi eint has been disabled!\n");
 	else {
-		if (wifi_irq != 0xffffffff) {
+		if (wifi_irq != 0xfffffff) {
 			disable_irq_nosync(wifi_irq);
 			CONNADP_DBG_FUNC("disable WIFI EINT %d!\n", wifi_irq);
 		}

@@ -1,17 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
-* Copyright (c) 2016 MediaTek Inc.
-* Author: PC Chen <pc.chen@mediatek.com>
-*         Tiffany Lin <tiffany.lin@mediatek.com>
-*
-* This program is free software; you can redistribute it and/or modify
-* it under the terms of the GNU General Public License version 2 as
-* published by the Free Software Foundation.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*/
+ * Copyright (c) 2019 MediaTek Inc.
+ */
 
 #ifndef _MTK_VCODEC_DRV_H_
 #define _MTK_VCODEC_DRV_H_
@@ -31,9 +21,9 @@
 #ifdef CONFIG_VB2_MEDIATEK_DMA_SG
 #include "mtkbuf-dma-cache-sg.h"
 #endif
-
+#ifdef CONFIG_MTK_SLBC
 #include "slbc_ops.h"
-
+#endif
 #define MTK_VCODEC_DRV_NAME     "mtk_vcodec_drv"
 #define MTK_VCODEC_DEC_NAME     "mtk-vcodec-dec"
 #define MTK_VCODEC_ENC_NAME     "mtk-vcodec-enc"
@@ -197,6 +187,7 @@ struct mtk_dec_params {
 	u64	timestamp;
 	unsigned int	total_frame_bufq_count;
 	unsigned int	queued_frame_buf_count;
+	int		priority;
 };
 
 /**
@@ -333,6 +324,7 @@ struct venc_enc_param {
  */
 struct venc_frm_buf {
 	struct mtk_vcodec_mem fb_addr[MTK_VCODEC_MAX_PLANES];
+	u32 index;
 	unsigned int num_planes;
 	u64 timestamp;
 	unsigned int roimap;
@@ -404,6 +396,8 @@ struct mtk_vcodec_ctx {
 	const struct vdec_common_if *dec_if;
 	const struct venc_common_if *enc_if;
 	unsigned long drv_handle;
+	uintptr_t bs_list[VB2_MAX_FRAME+1];
+	uintptr_t fb_list[VB2_MAX_FRAME+1];
 
 	struct vdec_pic_info picinfo;
 	int dpb_size;
@@ -427,6 +421,7 @@ struct mtk_vcodec_ctx {
 	struct vb2_buffer *pend_src_buf;
 	wait_queue_head_t fm_wq;
 	int input_driven;
+	int user_lock_hw;
 	/* for user lock HW case release check */
 	struct mutex hw_status;
 	int hw_locked[MTK_VDEC_HW_NUM];
@@ -441,7 +436,9 @@ struct mtk_vcodec_ctx {
 	int decoded_frame_cnt;
 	struct mutex buf_lock;
 	struct mutex worker_lock;
+#ifdef CONFIG_MTK_SLBC
 	struct slbc_data sram_data;
+#endif
 	int use_slbc;
 };
 
@@ -507,6 +504,7 @@ struct mtk_vcodec_dev {
 	struct workqueue_struct *encode_workqueue;
 	int int_cond;
 	int int_type;
+	struct mutex ctx_mutex;
 	struct mutex dev_mutex;
 	wait_queue_head_t queue;
 

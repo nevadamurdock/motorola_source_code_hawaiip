@@ -1,15 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2015 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- */
+ * Copyright (c) 2019 MediaTek Inc.
+*/
 
 #ifdef CONFIG_MTK_CLKMGR
 #include <mach/mt_clkmgr.h>
@@ -413,19 +405,19 @@ void usb_phy_switch_to_usb(void)
 void set_usb_phy_mode(int mode)
 {
 	switch (mode) {
-	case PHY_DEV_ACTIVE:
+	case PHY_MODE_USB_DEVICE:
 	/* VBUSVALID=1, AVALID=1, BVALID=1, SESSEND=0, IDDIG=1, IDPULLUP=1 */
 		USBPHY_CLR32(0x6C, (0x10<<0));
 		USBPHY_SET32(0x6C, (0x2F<<0));
 		USBPHY_SET32(0x6C, (0x3F<<8));
 		break;
-	case PHY_HOST_ACTIVE:
+	case PHY_MODE_USB_HOST:
 	/* VBUSVALID=1, AVALID=1, BVALID=1, SESSEND=0, IDDIG=0, IDPULLUP=1 */
 		USBPHY_CLR32(0x6c, (0x12<<0));
 		USBPHY_SET32(0x6c, (0x2d<<0));
 		USBPHY_SET32(0x6c, (0x3f<<8));
 		break;
-	case PHY_IDLE_MODE:
+	case PHY_MODE_INVALID:
 	/* VBUSVALID=0, AVALID=0, BVALID=0, SESSEND=1, IDDIG=0, IDPULLUP=1 */
 		USBPHY_SET32(0x6c, (0x11<<0));
 		USBPHY_CLR32(0x6c, (0x2e<<0));
@@ -582,7 +574,7 @@ static void usb_phy_savecurrent_internal(void)
 
 	udelay(1);
 
-	set_usb_phy_mode(PHY_IDLE_MODE);
+	set_usb_phy_mode(PHY_MODE_INVALID);
 }
 
 void usb_phy_savecurrent(void)
@@ -675,7 +667,7 @@ void usb_phy_recover(void)
 	udelay(800);
 
 	/* force enter device mode */
-	set_usb_phy_mode(PHY_DEV_ACTIVE);
+	set_usb_phy_mode(PHY_MODE_USB_DEVICE);
 
 	hs_slew_rate_cal();
 
@@ -697,11 +689,6 @@ void usb_phy_recover(void)
 /* BC1.2 */
 void Charger_Detect_Init(void)
 {
-	if ((get_boot_mode() == META_BOOT) || (get_boot_mode() == ADVMETA_BOOT)) {
-		DBG(0, "%s Skip\n", __func__);
-		return;
-	}
-
 	usb_prepare_enable_clock(true);
 
 	/* wait 50 usec. */
@@ -714,14 +701,10 @@ void Charger_Detect_Init(void)
 
 	DBG(0, "Charger_Detect_Init\n");
 }
+EXPORT_SYMBOL(Charger_Detect_Init);
 
 void Charger_Detect_Release(void)
 {
-	if ((get_boot_mode() == META_BOOT) || (get_boot_mode() == ADVMETA_BOOT)) {
-		DBG(0, "%s Skip\n", __func__);
-		return;
-	}
-
 	usb_prepare_enable_clock(true);
 
 	/* RG_USB20_BC11_SW_EN = 1'b0 */
@@ -733,6 +716,7 @@ void Charger_Detect_Release(void)
 
 	DBG(0, "Charger_Detect_Release\n");
 }
+EXPORT_SYMBOL(Charger_Detect_Release);
 
 void usb_phy_context_save(void)
 {
