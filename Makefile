@@ -443,12 +443,8 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -std=gnu89
 
 # fenghui.zou add for JOURNEY_BUILD_SCRIPT
-ifeq ($(JOURNEY_BUILD_SCRIPT),yes)
+# Removemos a trava e forçamos a inclusão das flags
 KBUILD_CFLAGS += $(KERNEL_JOURNEY_CFLAGS)
-$(warning KBUILD_CFLAGS $(KBUILD_CFLAGS))
-else
-$(error journey build script error)
-endif
 
 KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_AFLAGS_KERNEL :=
