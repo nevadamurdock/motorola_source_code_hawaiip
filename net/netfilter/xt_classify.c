@@ -18,7 +18,7 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/netfilter_ipv6.h>
 #include <linux/netfilter/x_tables.h>
-#include <linux/netfilter/xt_CLASSIFY.h>
+#include <linux/netfilter/xt_classify.h>
 #include <linux/netfilter_arp.h>
 
 MODULE_AUTHOR("Patrick McHardy <kaber@trash.net>");

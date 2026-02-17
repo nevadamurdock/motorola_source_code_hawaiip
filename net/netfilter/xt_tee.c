@@ -19,7 +19,7 @@
 #include <net/route.h>
 #include <net/netfilter/ipv4/nf_dup_ipv4.h>
 #include <net/netfilter/ipv6/nf_dup_ipv6.h>
-#include <linux/netfilter/xt_TEE.h>
+#include <linux/netfilter/xt_tee.h>
 
 struct xt_tee_priv {
 	struct list_head	list;

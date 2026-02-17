@@ -24,7 +24,7 @@
 
 #include <linux/netfilter.h>
 #include <linux/netfilter/x_tables.h>
-#include <linux/netfilter/xt_LOG.h>
+#include <linux/netfilter/xt_log.h>
 #include <linux/netfilter_ipv6/ip6_tables.h>
 #include <net/netfilter/nf_log.h>
 

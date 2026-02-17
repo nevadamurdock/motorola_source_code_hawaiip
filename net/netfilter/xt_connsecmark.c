@@ -19,7 +19,7 @@
 #include <linux/module.h>
 #include <linux/skbuff.h>
 #include <linux/netfilter/x_tables.h>
-#include <linux/netfilter/xt_CONNSECMARK.h>
+#include <linux/netfilter/xt_connsecmark.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_ecache.h>
 

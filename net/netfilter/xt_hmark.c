@@ -1,5 +1,5 @@
 /*
- * xt_HMARK - Netfilter module to set mark by means of hashing
+ * xt_hmark - Netfilter module to set mark by means of hashing
  *
  * (C) 2012 by Hans Schillstrom <hans.schillstrom@ericsson.com>
  * (C) 2012 by Pablo Neira Ayuso <pablo@netfilter.org>
@@ -16,7 +16,7 @@
 #include <linux/icmp.h>
 
 #include <linux/netfilter/x_tables.h>
-#include <linux/netfilter/xt_HMARK.h>
+#include <linux/netfilter/xt_hmark.h>
 
 #include <net/ip.h>
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)

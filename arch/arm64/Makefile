@@ -81,21 +81,16 @@ endif
 CHECKFLAGS	+= -D__aarch64__
 
 ifeq ($(CONFIG_ARM64_MODULE_PLTS),y)
-KBUILD_LDFLAGS_MODULE	+= -T $(srctree)/arch/arm64/kernel/module.lds
+KBUILD_LDFLAGS_MODULE    += -T $(srctree)/arch/arm64/kernel/module.lds
 endif
 
 # Default value
-head-y		:= arch/arm64/kernel/head.o
+head-y           := arch/arm64/kernel/head.o
 
-# The byte offset of the kernel image in RAM from the start of RAM.
-ifeq ($(CONFIG_ARM64_RANDOMIZE_TEXT_OFFSET), y)
-TEXT_OFFSET := $(shell awk "BEGIN {srand(); printf \"0x%06x\n\", \
-		 int(2 * 1024 * 1024 / (2 ^ $(CONFIG_ARM64_PAGE_SHIFT)) * \
-		 rand()) * (2 ^ $(CONFIG_ARM64_PAGE_SHIFT))}")
-else
+# Forçando o offset fixo para bater com o Stock da Motorola
 TEXT_OFFSET := 0x00080000
-endif
 
+# Configurações do KASAN (não mexa no TEXT_OFFSET aqui dentro)
 ifeq ($(CONFIG_KASAN_SW_TAGS), y)
 KASAN_SHADOW_SCALE_SHIFT := 4
 else

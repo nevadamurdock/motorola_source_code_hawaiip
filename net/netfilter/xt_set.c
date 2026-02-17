@@ -23,7 +23,7 @@
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jozsef Kadlecsik <kadlec@blackhole.kfki.hu>");
 MODULE_DESCRIPTION("Xtables: IP set match and target module");
-MODULE_ALIAS("xt_SET");
+MODULE_ALIAS("xt_set");
 MODULE_ALIAS("ipt_set");
 MODULE_ALIAS("ip6t_set");
 MODULE_ALIAS("ipt_SET");

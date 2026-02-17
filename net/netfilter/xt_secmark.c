@@ -17,7 +17,7 @@
 #include <linux/security.h>
 #include <linux/skbuff.h>
 #include <linux/netfilter/x_tables.h>
-#include <linux/netfilter/xt_SECMARK.h>
+#include <linux/netfilter/xt_secmark.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("James Morris <jmorris@redhat.com>");

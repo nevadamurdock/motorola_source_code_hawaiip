@@ -16,7 +16,7 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter_arp.h>
 #include <linux/netfilter/x_tables.h>
-#include <linux/netfilter/xt_NFQUEUE.h>
+#include <linux/netfilter/xt_nfqueue.h>
 
 #include <net/netfilter/nf_queue.h>
 
@@ -32,7 +32,7 @@ static u32 jhash_initval __read_mostly;
 static unsigned int
 nfqueue_tg(struct sk_buff *skb, const struct xt_action_param *par)
 {
-	const struct xt_NFQ_info *tinfo = par->targinfo;
+	const struct xt_nfq_info *tinfo = par->targinfo;
 
 	return NF_QUEUE_NR(tinfo->queuenum);
 }
@@ -40,7 +40,7 @@ nfqueue_tg(struct sk_buff *skb, const struct xt_action_param *par)
 static unsigned int
 nfqueue_tg_v1(struct sk_buff *skb, const struct xt_action_param *par)
 {
-	const struct xt_NFQ_info_v1 *info = par->targinfo;
+	const struct xt_nfq_info_v1 *info = par->targinfo;
 	u32 queue = info->queuenum;
 
 	if (info->queues_total > 1) {
@@ -53,7 +53,7 @@ nfqueue_tg_v1(struct sk_buff *skb, const struct xt_action_param *par)
 static unsigned int
 nfqueue_tg_v2(struct sk_buff *skb, const struct xt_action_param *par)
 {
-	const struct xt_NFQ_info_v2 *info = par->targinfo;
+	const struct xt_nfq_info_v2 *info = par->targinfo;
 	unsigned int ret = nfqueue_tg_v1(skb, par);
 
 	if (info->bypass)
@@ -63,7 +63,7 @@ nfqueue_tg_v2(struct sk_buff *skb, const struct xt_action_param *par)
 
 static int nfqueue_tg_check(const struct xt_tgchk_param *par)
 {
-	const struct xt_NFQ_info_v3 *info = par->targinfo;
+	const struct xt_nfq_info_v3 *info = par->targinfo;
 	u32 maxid;
 
 	init_hashrandom(&jhash_initval);
@@ -89,7 +89,7 @@ static int nfqueue_tg_check(const struct xt_tgchk_param *par)
 static unsigned int
 nfqueue_tg_v3(struct sk_buff *skb, const struct xt_action_param *par)
 {
-	const struct xt_NFQ_info_v3 *info = par->targinfo;
+	const struct xt_nfq_info_v3 *info = par->targinfo;
 	u32 queue = info->queuenum;
 	int ret;
 
@@ -116,7 +116,7 @@ static struct xt_target nfqueue_tg_reg[] __read_mostly = {
 		.name		= "NFQUEUE",
 		.family		= NFPROTO_UNSPEC,
 		.target		= nfqueue_tg,
-		.targetsize	= sizeof(struct xt_NFQ_info),
+		.targetsize	= sizeof(struct xt_nfq_info),
 		.me		= THIS_MODULE,
 	},
 	{
@@ -125,7 +125,7 @@ static struct xt_target nfqueue_tg_reg[] __read_mostly = {
 		.family		= NFPROTO_UNSPEC,
 		.checkentry	= nfqueue_tg_check,
 		.target		= nfqueue_tg_v1,
-		.targetsize	= sizeof(struct xt_NFQ_info_v1),
+		.targetsize	= sizeof(struct xt_nfq_info_v1),
 		.me		= THIS_MODULE,
 	},
 	{
@@ -134,7 +134,7 @@ static struct xt_target nfqueue_tg_reg[] __read_mostly = {
 		.family		= NFPROTO_UNSPEC,
 		.checkentry	= nfqueue_tg_check,
 		.target		= nfqueue_tg_v2,
-		.targetsize	= sizeof(struct xt_NFQ_info_v2),
+		.targetsize	= sizeof(struct xt_nfq_info_v2),
 		.me		= THIS_MODULE,
 	},
 	{
@@ -143,7 +143,7 @@ static struct xt_target nfqueue_tg_reg[] __read_mostly = {
 		.family		= NFPROTO_UNSPEC,
 		.checkentry	= nfqueue_tg_check,
 		.target		= nfqueue_tg_v3,
-		.targetsize	= sizeof(struct xt_NFQ_info_v3),
+		.targetsize	= sizeof(struct xt_nfq_info_v3),
 		.me		= THIS_MODULE,
 	},
 };

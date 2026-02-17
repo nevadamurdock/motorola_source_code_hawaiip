@@ -26,7 +26,7 @@
 #include <linux/netfilter_arp.h>
 #include <linux/netfilter/x_tables.h>
 #include <linux/netfilter_ipv4/ip_tables.h>
-#include <linux/netfilter_ipv4/ipt_CLUSTERIP.h>
+#include <linux/netfilter_ipv4/ipt_clusterip.h>
 #include <net/netfilter/nf_conntrack.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
@@ -522,7 +522,7 @@ static int clusterip_tg_check(const struct xt_tgchk_param *par)
 	}
 
 	if (!par->net->xt.clusterip_deprecated_warning) {
-		pr_info("ipt_CLUSTERIP is deprecated and it will removed soon, "
+		pr_info("ipt_clusterip is deprecated and it will removed soon, "
 			"use xt_cluster instead\n");
 		par->net->xt.clusterip_deprecated_warning = true;
 	}
@@ -832,7 +832,7 @@ static int clusterip_net_init(struct net *net)
 		return ret;
 
 #ifdef CONFIG_PROC_FS
-	cn->procdir = proc_mkdir("ipt_CLUSTERIP", net->proc_net);
+	cn->procdir = proc_mkdir("ipt_clusterip", net->proc_net);
 	if (!cn->procdir) {
 		nf_unregister_net_hook(net, &cip_arp_ops);
 		pr_err("Unable to proc dir entry\n");

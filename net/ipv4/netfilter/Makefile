@@ -57,11 +57,11 @@ obj-$(CONFIG_IP_NF_MATCH_AH) += ipt_ah.o
 obj-$(CONFIG_IP_NF_MATCH_RPFILTER) += ipt_rpfilter.o
 
 # targets
-obj-$(CONFIG_IP_NF_TARGET_CLUSTERIP) += ipt_CLUSTERIP.o
-obj-$(CONFIG_IP_NF_TARGET_ECN) += ipt_ECN.o
-obj-$(CONFIG_IP_NF_TARGET_MASQUERADE) += ipt_MASQUERADE.o
-obj-$(CONFIG_IP_NF_TARGET_REJECT) += ipt_REJECT.o
-obj-$(CONFIG_IP_NF_TARGET_SYNPROXY) += ipt_SYNPROXY.o
+obj-$(CONFIG_IP_NF_TARGET_CLUSTERIP) += ipt_clusterip.o
+obj-$(CONFIG_IP_NF_TARGET_ECN) += ipt_ecn.o
+obj-$(CONFIG_IP_NF_TARGET_MASQUERADE) += ipt_masquerade.o
+obj-$(CONFIG_IP_NF_TARGET_REJECT) += ipt_reject.o
+obj-$(CONFIG_IP_NF_TARGET_SYNPROXY) += ipt_synproxy.o
 
 # generic ARP tables
 obj-$(CONFIG_IP_NF_ARPTABLES) += arp_tables.o

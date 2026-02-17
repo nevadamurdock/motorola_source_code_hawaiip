@@ -18,7 +18,7 @@
 
 #include <linux/netfilter.h>
 #include <linux/netfilter_bridge.h>
-#include <linux/netfilter/xt_LOG.h>
+#include <linux/netfilter/xt_log.h>
 #include <net/netfilter/nf_log.h>
 
 int nf_log_dump_udp_header(struct nf_log_buf *m, const struct sk_buff *skb,

@@ -1,5 +1,5 @@
 /*
- * linux/net/netfilter/xt_IDLETIMER.c
+ * linux/net/netfilter/xt_idletimer.c
  *
  * Netfilter module to trigger a timer when packet matches.
  * After timer expires a kevent will be sent.
@@ -36,7 +36,7 @@
 #include <linux/mutex.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter/x_tables.h>
-#include <linux/netfilter/xt_IDLETIMER.h>
+#include <linux/netfilter/xt_idletimer.h>
 #include <linux/kdev_t.h>
 #include <linux/kobject.h>
 #include <linux/skbuff.h>

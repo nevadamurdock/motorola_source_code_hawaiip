@@ -14,7 +14,7 @@
 #include <linux/skbuff.h>
 
 #include <linux/netfilter/x_tables.h>
-#include <linux/netfilter/xt_CHECKSUM.h>
+#include <linux/netfilter/xt_checksum.h>
 
 #include <linux/netfilter_ipv4/ip_tables.h>
 #include <linux/netfilter_ipv6/ip6_tables.h>
@@ -36,7 +36,7 @@ checksum_tg(struct sk_buff *skb, const struct xt_action_param *par)
 
 static int checksum_tg_check(const struct xt_tgchk_param *par)
 {
-	const struct xt_CHECKSUM_info *einfo = par->targinfo;
+	const struct xt_checksum_info *einfo = par->targinfo;
 	const struct ip6t_ip6 *i6 = par->entryinfo;
 	const struct ipt_ip *i4 = par->entryinfo;
 
@@ -70,7 +70,7 @@ static struct xt_target checksum_tg_reg __read_mostly = {
 	.name		= "CHECKSUM",
 	.family		= NFPROTO_UNSPEC,
 	.target		= checksum_tg,
-	.targetsize	= sizeof(struct xt_CHECKSUM_info),
+	.targetsize	= sizeof(struct xt_checksum_info),
 	.table		= "mangle",
 	.checkentry	= checksum_tg_check,
 	.me		= THIS_MODULE,

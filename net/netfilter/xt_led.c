@@ -1,5 +1,5 @@
 /*
- * xt_LED.c - netfilter target to make LEDs blink upon packet matches
+ * xt_led.c - netfilter target to make LEDs blink upon packet matches
  *
  * Copyright (C) 2008 Adam Nielsen <a.nielsen@shikadi.net>
  *
@@ -26,7 +26,7 @@
 #include <linux/leds.h>
 #include <linux/mutex.h>
 
-#include <linux/netfilter/xt_LED.h>
+#include <linux/netfilter/xt_led.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Adam Nielsen <a.nielsen@shikadi.net>");

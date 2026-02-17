@@ -111,9 +111,9 @@ SECTIONS
 		*(.eh_frame)
 	}
 
-	. = KIMAGE_VADDR + TEXT_OFFSET;
+	. = ALIGN(KIMAGE_VADDR + TEXT_OFFSET, SZ_4K);
 
-	.head.text : {
+    .head.text : {
 		_text = .;
 		HEAD_TEXT
 	}

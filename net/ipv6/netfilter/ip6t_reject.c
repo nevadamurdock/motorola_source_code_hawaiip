@@ -27,7 +27,7 @@
 #include <net/flow.h>
 #include <linux/netfilter/x_tables.h>
 #include <linux/netfilter_ipv6/ip6_tables.h>
-#include <linux/netfilter_ipv6/ip6t_REJECT.h>
+#include <linux/netfilter_ipv6/ip6t_reject.h>
 
 #include <net/netfilter/ipv6/nf_reject.h>
 

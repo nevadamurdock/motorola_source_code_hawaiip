@@ -34,7 +34,7 @@
 #endif
 
 #include <net/netfilter/nf_tproxy.h>
-#include <linux/netfilter/xt_TPROXY.h>
+#include <linux/netfilter/xt_tproxy.h>
 
 static unsigned int
 tproxy_tg4(struct net *net, struct sk_buff *skb, __be32 laddr, __be16 lport,

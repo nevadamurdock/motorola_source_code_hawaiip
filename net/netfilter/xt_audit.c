@@ -18,7 +18,7 @@
 #include <linux/udp.h>
 #include <linux/if_arp.h>
 #include <linux/netfilter/x_tables.h>
-#include <linux/netfilter/xt_AUDIT.h>
+#include <linux/netfilter/xt_audit.h>
 #include <linux/netfilter_bridge/ebtables.h>
 #include <net/ipv6.h>
 #include <net/ip.h>

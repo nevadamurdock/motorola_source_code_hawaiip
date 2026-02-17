@@ -17,7 +17,7 @@
 
 #include <linux/netfilter/x_tables.h>
 #include <linux/netfilter_ipv4/ip_tables.h>
-#include <linux/netfilter_ipv4/ipt_ECN.h>
+#include <linux/netfilter_ipv4/ipt_ecn.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Harald Welte <laforge@netfilter.org>");
@@ -26,7 +26,7 @@ MODULE_DESCRIPTION("Xtables: Explicit Congestion Notification (ECN) flag modific
 /* set ECT codepoint from IP header.
  * 	return false if there was an error. */
 static inline bool
-set_ect_ip(struct sk_buff *skb, const struct ipt_ECN_info *einfo)
+set_ect_ip(struct sk_buff *skb, const struct ipt_ecn_info *einfo)
 {
 	struct iphdr *iph = ip_hdr(skb);
 
@@ -45,7 +45,7 @@ set_ect_ip(struct sk_buff *skb, const struct ipt_ECN_info *einfo)
 
 /* Return false if there was an error. */
 static inline bool
-set_ect_tcp(struct sk_buff *skb, const struct ipt_ECN_info *einfo)
+set_ect_tcp(struct sk_buff *skb, const struct ipt_ecn_info *einfo)
 {
 	struct tcphdr _tcph, *tcph;
 	__be16 oldval;
@@ -79,7 +79,7 @@ set_ect_tcp(struct sk_buff *skb, const struct ipt_ECN_info *einfo)
 static unsigned int
 ecn_tg(struct sk_buff *skb, const struct xt_action_param *par)
 {
-	const struct ipt_ECN_info *einfo = par->targinfo;
+	const struct ipt_ecn_info *einfo = par->targinfo;
 
 	if (einfo->operation & IPT_ECN_OP_SET_IP)
 		if (!set_ect_ip(skb, einfo))
@@ -95,7 +95,7 @@ ecn_tg(struct sk_buff *skb, const struct xt_action_param *par)
 
 static int ecn_tg_check(const struct xt_tgchk_param *par)
 {
-	const struct ipt_ECN_info *einfo = par->targinfo;
+	const struct ipt_ecn_info *einfo = par->targinfo;
 	const struct ipt_entry *e = par->entryinfo;
 
 	if (einfo->operation & IPT_ECN_OP_MASK)
@@ -116,7 +116,7 @@ static struct xt_target ecn_tg_reg __read_mostly = {
 	.name		= "ECN",
 	.family		= NFPROTO_IPV4,
 	.target		= ecn_tg,
-	.targetsize	= sizeof(struct ipt_ECN_info),
+	.targetsize	= sizeof(struct ipt_ecn_info),
 	.table		= "mangle",
 	.checkentry	= ecn_tg_check,
 	.me		= THIS_MODULE,
