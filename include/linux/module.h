@@ -849,4 +849,8 @@ static inline bool module_sig_ok(struct module *module)
 }
 #endif	/* CONFIG_MODULE_SIG */
 
+#ifndef MODULE_IMPORT_NS
+#define MODULE_IMPORT_NS(ns)
+#endif
+
 #endif /* _LINUX_MODULE_H */
