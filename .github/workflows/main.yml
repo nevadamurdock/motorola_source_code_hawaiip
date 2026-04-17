@@ -1,0 +1,84 @@
+name: Build Kernel - Hawaiip (ZyC Clang)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maximize Build Space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 8192
+          temp-reserve-mb: 2048
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc build-essential flex bison gawk libssl-dev libelf-dev \
+          cpio git lz4 rsync adb libncurses5-dev wget tar
+
+      - name: Set Up Environment
+        run: |
+          echo "BUILD_TIME=$(date +'%Y%m%d_%H%M')" >> $GITHUB_ENV
+          echo "KERNEL_DIR=$GITHUB_WORKSPACE/kernel" >> $GITHUB_ENV
+          echo "TC_DIR=$GITHUB_WORKSPACE/zyc-clang" >> $GITHUB_ENV
+
+      - name: Download ZyC Clang 12
+        run: |
+          mkdir -p $TC_DIR
+          cd $TC_DIR
+          # Mengunduh ZyC Clang 12 (versi stabil)
+          wget https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20210729-release/Clang-12.0.1-20210729.tar.gz
+          tar -xf Clang-12.0.1-20210729.tar.gz
+
+      - name: Clone Kernel Source
+        run: |
+          git clone --depth=1 https://github.com/nevadamurdock/motorola_source_code_hawaiip -b main $KERNEL_DIR
+
+      - name: Build Kernel
+        run: |
+          cd $KERNEL_DIR
+          
+          # Setup Path untuk ZyC Clang
+          export PATH=$TC_DIR/bin:$PATH
+          
+          # Variabel Kompilasi
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export KBUILD_COMPILER_STRING="ZyC Clang 12"
+          
+          # Jalankan Defconfig yang diminta
+          make O=out k65v1_64_bsp_defconfig
+          
+          # Mulai Kompilasi
+          make -j$(nproc --all) O=out \
+            CC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip
+
+      - name: Check for Output
+        run: |
+          if [ -f $KERNEL_DIR/out/arch/arm64/boot/Image.gz ] || [ -f $KERNEL_DIR/out/arch/arm64/boot/Image ]; then
+            echo "Build Success!"
+          else
+            echo "Build Failed!"
+            exit 1
+          fi
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kernel-Hawaiip-ZyC-${{ env.BUILD_TIME }}
+          path: |
+            ${{ env.KERNEL_DIR }}/out/arch/arm64/boot/Image*
+            ${{ env.KERNEL_DIR }}/out/arch/arm64/boot/dtbo.img
