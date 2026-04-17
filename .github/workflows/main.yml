@@ -1,4 +1,4 @@
-name: Build Kernel - Hawaiip (ZyC Clang)
+name: Build Kernel - Hawaiip (ZyC Clang 12)
 
 on:
   workflow_dispatch:
@@ -32,9 +32,9 @@ jobs:
         run: |
           mkdir -p $TC_DIR
           cd $TC_DIR
-          # Mengunduh ZyC Clang 12 (versi stabil)
-          wget https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20210729-release/Clang-12.0.1-20210729.tar.gz
-          tar -xf Clang-12.0.1-20210729.tar.gz
+          # Menggunakan link spesifik yang Anda berikan
+          wget https://github.com/ZyCromerZ/Clang/releases/download/12.0.1-20230207-release/Clang-12.0.1-20230207.tar.gz
+          tar -xf Clang-12.0.1-20230207.tar.gz
 
       - name: Clone Kernel Source
         run: |
@@ -44,18 +44,18 @@ jobs:
         run: |
           cd $KERNEL_DIR
           
-          # Setup Path untuk ZyC Clang
+          # Path ke compiler
           export PATH=$TC_DIR/bin:$PATH
           
-          # Variabel Kompilasi
+          # Setup Environment Kompilasi
           export ARCH=arm64
           export SUBARCH=arm64
-          export KBUILD_COMPILER_STRING="ZyC Clang 12"
+          export KBUILD_COMPILER_STRING="ZyC Clang 12 (20230207)"
           
-          # Jalankan Defconfig yang diminta
+          # Langkah 1: Generate Config
           make O=out k65v1_64_bsp_defconfig
           
-          # Mulai Kompilasi
+          # Langkah 2: Build
           make -j$(nproc --all) O=out \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
@@ -64,21 +64,22 @@ jobs:
             NM=llvm-nm \
             OBJCOPY=llvm-objcopy \
             OBJDUMP=llvm-objdump \
-            STRIP=llvm-strip
+            STRIP=llvm-strip \
+            LD=ld.lld
 
       - name: Check for Output
         run: |
           if [ -f $KERNEL_DIR/out/arch/arm64/boot/Image.gz ] || [ -f $KERNEL_DIR/out/arch/arm64/boot/Image ]; then
-            echo "Build Success!"
+            echo "Build Berhasil!"
           else
-            echo "Build Failed!"
+            echo "Build Gagal! Silakan cek log di atas."
             exit 1
           fi
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel-Hawaiip-ZyC-${{ env.BUILD_TIME }}
+          name: Kernel-Hawaiip-ZyC-12-${{ env.BUILD_TIME }}
           path: |
             ${{ env.KERNEL_DIR }}/out/arch/arm64/boot/Image*
             ${{ env.KERNEL_DIR }}/out/arch/arm64/boot/dtbo.img
